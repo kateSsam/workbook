@@ -7,8 +7,8 @@ LESSONS = {
         "subtitle": "문장 강세와 정확한 모음 발음으로, 첫인사를 또렷하게 전달하는 연습이에요.",
         "preview": {
             "goals": [
-                {"title": "문장 끝을 흐리지 않기", "desc": '"반갑습니다" 같은 문장은 끝까지 힘을 유지해요.'},
-                {"title": "모음을 크게, 정확하게", "desc": '입모양을 또렷이 만들어 "아, 어, 오, 우"가 구분되게 해요.'},
+                {"title": "문장 끝을 흐리지 않기", "desc": "문장의 마지막 단어까지 힘을 유지해요."},
+                {"title": "모음을 크고 정확하게", "desc": "입모양을 또렷이 만들어 단어가 뭉개지지 않게 해요."},
                 {"title": "숨 쉬는 지점 정하기", "desc": "문장 중간에 어디서 숨을 쉴지 미리 표시해두면 안정감이 생겨요."},
             ],
             "checklist": [
@@ -31,7 +31,7 @@ LESSONS = {
                 "fb": "모음이 흐려지면 단어 전체가 뭉개져 들려요. 입모양이 핵심이에요.",
             },
         ],
-        "practice_sentence": "안녕하세요, 저는 OOO입니다. 오늘 만나 뵙게 되어 반갑습니다.",
+        "practice_sentence": "Hi, my name is ___. It's great to finally meet you today, and I'm really looking forward to our conversation.",
         "model_audio_url": None,  # 실제 음원 파일 경로가 생기면 여기에 넣으세요 (예: "/static/audio/lesson1.mp3")
         "rate_items": [
             {"key": "clarity", "label": "발음이 또렷했나요?"},

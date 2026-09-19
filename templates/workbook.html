@@ -219,18 +219,26 @@ function reviewHTML(){
 
 function trainingHTML(){
   const modelBtn = LESSON.model_audio_url
-    ? `<audio controls src="${LESSON.model_audio_url}"></audio>`
+    ? `<button class="btn btn-outline" id="playModel">🔊 모범 음원 듣기</button>`
     : `<button class="btn btn-outline" id="playModel">🔊 모범 음원 듣기 (임시 음성)</button>`;
+  const audioEl = LESSON.model_audio_url
+    ? `<audio id="modelAudioEl" src="${LESSON.model_audio_url}" style="display:none"></audio>`
+    : '';
   return `
     <h2>연습 문장</h2>
     <p class="lead">아래 문장을 모범 음원처럼 또렷하게 따라 읽어보세요.</p>
     <div class="practice-sentence">${LESSON.practice_sentence}</div>
-    <div class="row">${modelBtn}</div>
+    ${audioEl}
+    <div class="row">
+      ${modelBtn}
+      <button class="btn btn-outline" id="playAndRecordBtn">🎧 들으면서 바로 녹음하기</button>
+    </div>
+    <p class="lead" style="margin-top:-6px;">"들으면서 바로 녹음하기"는 음원 재생과 동시에 내 목소리도 녹음해요. 이어폰을 꼭 껴주세요 (스피커로 재생하면 그 소리도 같이 녹음돼요).</p>
     <div class="divider">${dividerBars()}</div>
     <h2>내 목소리로 연습하기</h2>
     <p class="lead">녹음하면 선생님 서버로 저장돼요. 여러 번 다시 녹음해도 괜찮아요.</p>
     <div class="row">
-      <button class="btn btn-record" id="recordBtn">● 녹음 시작</button>
+      <button class="btn btn-record" id="recordBtn">● 녹음만 시작</button>
       <span id="recStatus" class="up-status"></span>
     </div>
     <div id="recPlayback"></div>
@@ -310,65 +318,86 @@ function wireStage(key){
   }
 
   if (key === 'training') {
-    const playBtn = document.getElementById('playModel');
-    if (playBtn) {
-      playBtn.addEventListener('click', () => {
-        if (!('speechSynthesis' in window)) { alert('이 브라우저는 음성 재생을 지원하지 않아요.'); return; }
-        const u = new SpeechSynthesisUtterance(LESSON.practice_sentence);
-        u.lang = 'ko-KR'; u.rate = 0.92;
-        speechSynthesis.cancel(); speechSynthesis.speak(u);
-      });
+    function playModel(){
+      const audioEl = document.getElementById('modelAudioEl');
+      if (audioEl) {
+        audioEl.currentTime = 0;
+        audioEl.play().catch(() => {});
+        return;
+      }
+      if (!('speechSynthesis' in window)) { alert('이 브라우저는 음성 재생을 지원하지 않아요.'); return; }
+      const u = new SpeechSynthesisUtterance(LESSON.practice_sentence);
+      u.lang = 'ko-KR'; u.rate = 0.92;
+      speechSynthesis.cancel(); speechSynthesis.speak(u);
     }
 
+    const playBtn = document.getElementById('playModel');
+    if (playBtn) playBtn.addEventListener('click', playModel);
+
     const recordBtn = document.getElementById('recordBtn');
+    const playAndRecordBtn = document.getElementById('playAndRecordBtn');
     const recStatus = document.getElementById('recStatus');
     const recError = document.getElementById('recError');
     const recPlayback = document.getElementById('recPlayback');
     let mediaRecorder = null, chunks = [], recording = false;
 
-    recordBtn.addEventListener('click', async () => {
-      if (!recording) {
-        if (!navigator.mediaDevices || !window.MediaRecorder) {
-          recError.style.display = 'block';
-          recError.textContent = '이 브라우저에서는 녹음 기능을 사용할 수 없어요.';
-          return;
-        }
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          chunks = [];
-          mediaRecorder = new MediaRecorder(stream);
-          mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-          mediaRecorder.onstop = async () => {
-            const blob = new Blob(chunks, { type: chunks[0] && chunks[0].type ? chunks[0].type : 'audio/webm' });
-            lastRecordingBlob = blob;
-            const url = URL.createObjectURL(blob);
-            recPlayback.innerHTML = `<audio controls src="${url}"></audio>`;
-            stream.getTracks().forEach(t => t.stop());
-            recStatus.textContent = '서버로 업로드하는 중...';
-            try {
-              const fd = new FormData();
-              fd.append('file', blob, 'recording.webm');
-              const res = await fetch(`${API_BASE}/upload?lesson=${encodeURIComponent(LESSON_ID)}`, { method: 'POST', body: fd });
-              if (res.ok) { recStatus.textContent = '업로드 완료! 선생님이 확인하실 수 있어요.'; saveState({ hasRecording: true }); }
-              else { recStatus.textContent = '업로드에 실패했어요. 다시 시도해주세요.'; }
-            } catch (e) { recStatus.textContent = '업로드에 실패했어요. 인터넷 연결을 확인해주세요.'; }
-          };
-          mediaRecorder.start();
-          recording = true;
-          recordBtn.textContent = '■ 녹음 멈추기';
-          recordBtn.classList.add('recording');
-          recStatus.textContent = '녹음 중...';
-          recError.style.display = 'none';
-        } catch (err) {
-          recError.style.display = 'block';
-          recError.textContent = '마이크 권한을 허용해주셔야 녹음할 수 있어요.';
-        }
-      } else {
-        mediaRecorder.stop();
-        recording = false;
-        recordBtn.textContent = '● 녹음 시작';
-        recordBtn.classList.remove('recording');
+    async function startRecording(){
+      if (recording) return;
+      if (!navigator.mediaDevices || !window.MediaRecorder) {
+        recError.style.display = 'block';
+        recError.textContent = '이 브라우저에서는 녹음 기능을 사용할 수 없어요.';
+        return;
       }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        chunks = [];
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+        mediaRecorder.onstop = async () => {
+          const blob = new Blob(chunks, { type: chunks[0] && chunks[0].type ? chunks[0].type : 'audio/webm' });
+          lastRecordingBlob = blob;
+          const url = URL.createObjectURL(blob);
+          recPlayback.innerHTML = `<audio controls src="${url}"></audio>`;
+          stream.getTracks().forEach(t => t.stop());
+          recStatus.textContent = '서버로 업로드하는 중...';
+          try {
+            const fd = new FormData();
+            fd.append('file', blob, 'recording.webm');
+            const res = await fetch(`${API_BASE}/upload?lesson=${encodeURIComponent(LESSON_ID)}`, { method: 'POST', body: fd });
+            if (res.ok) { recStatus.textContent = '업로드 완료! 선생님이 확인하실 수 있어요.'; saveState({ hasRecording: true }); }
+            else { recStatus.textContent = '업로드에 실패했어요. 다시 시도해주세요.'; }
+          } catch (e) { recStatus.textContent = '업로드에 실패했어요. 인터넷 연결을 확인해주세요.'; }
+        };
+        mediaRecorder.start();
+        recording = true;
+        recordBtn.textContent = '■ 녹음 멈추기';
+        recordBtn.classList.add('recording');
+        playAndRecordBtn.disabled = true;
+        recStatus.textContent = '녹음 중...';
+        recError.style.display = 'none';
+      } catch (err) {
+        recError.style.display = 'block';
+        recError.textContent = '마이크 권한을 허용해주셔야 녹음할 수 있어요.';
+      }
+    }
+
+    function stopRecording(){
+      if (!recording) return;
+      mediaRecorder.stop();
+      recording = false;
+      recordBtn.textContent = '● 녹음만 시작';
+      recordBtn.classList.remove('recording');
+      playAndRecordBtn.disabled = false;
+      playAndRecordBtn.textContent = '🎧 들으면서 바로 녹음하기';
+    }
+
+    recordBtn.addEventListener('click', () => { recording ? stopRecording() : startRecording(); });
+
+    playAndRecordBtn.addEventListener('click', async () => {
+      if (recording) { stopRecording(); return; }
+      await startRecording();
+      playModel();
+      playAndRecordBtn.textContent = '■ 재생+녹음 멈추기';
     });
 
     document.getElementById('nextFromTraining').addEventListener('click', () => { markDone('training'); renderTracker(); goTo(3); });
