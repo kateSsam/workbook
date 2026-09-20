@@ -87,6 +87,10 @@
   .rate-scale button.picked { background:var(--gold); border-color:var(--gold); color:#fff; }
   .note-box { background:var(--gold-soft); border-radius:10px; padding:14px 16px; font-size:0.88rem; color:var(--ink-soft); margin-top:18px; white-space:pre-wrap; }
   .blank-slot { display:inline-block; min-width:52px; border-bottom:2px solid var(--teal); color:transparent; user-select:none; }
+  .blank-input { border:none; border-bottom:2px solid var(--teal); background:transparent; font:inherit; font-family:'Noto Serif KR',serif; color:var(--ink); text-align:center; padding:2px 4px; margin:0 2px; }
+  .blank-input:focus { outline:none; border-bottom-color:var(--gold); }
+  .blank-input.blank-correct { border-bottom-color:var(--teal); background:var(--teal-soft); }
+  .blank-input.blank-wrong { border-bottom-color:var(--coral); background:var(--coral-soft); }
   .footer-nav { display:flex; justify-content:space-between; margin-top:26px; }
   .up-status { font-size:0.82rem; color:var(--ink-soft); }
   @media (max-width:480px) { .shell{padding:20px 14px 70px;} .card{padding:22px 16px;} .stage-btn{min-width:88px;} }
@@ -177,27 +181,37 @@ function renderStage(i){
   wireStage(s.key);
 }
 
-function parseBlanks(text){
-  // [단어] 형태를 빈칸으로 바꾸고, 정답 목록을 함께 반환
+function escapeAttr(s){
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function parseBlanks(text, stage){
+  // [단어] 형태를 실제 입력 가능한 빈칸으로 바꾸고, 정답 목록을 함께 반환
   const answers = [];
   const html = text.replace(/\[([^\]]+)\]/g, (m, word) => {
+    const idx = answers.length;
     answers.push(word.trim());
-    return `<span class="blank-slot">_____</span>`;
+    const w = Math.max(3, Math.min(14, word.trim().length + 2));
+    return `<input type="text" class="blank-input" id="blank-${stage}-${idx}" data-answer="${escapeAttr(word.trim())}" style="width:${w}ch" autocomplete="off" autocapitalize="off" spellcheck="false">`;
   });
   return { html, answers, hasBlanks: answers.length > 0 };
 }
 
 function scriptSectionHTML(stage, scriptText){
   if (!scriptText || !scriptText.trim()) return '';
-  const parsed = parseBlanks(scriptText);
-  const revealBtn = parsed.hasBlanks
-    ? `<button class="btn btn-outline" id="revealAnswerBtn-${stage}" style="margin-top:10px;">정답 보기</button>
+  const parsed = parseBlanks(scriptText, stage);
+  const blankControls = parsed.hasBlanks
+    ? `<div class="row" style="margin-top:14px;">
+         <button class="btn btn-primary" id="checkBlanksBtn-${stage}">채점하기</button>
+         <button class="btn btn-outline" id="revealAnswerBtn-${stage}">정답 보기</button>
+         <span id="blankResult-${stage}" class="up-status"></span>
+       </div>
        <div id="answerBox-${stage}" style="display:none;margin-top:10px;" class="note-box">${scriptText.replace(/\[([^\]]+)\]/g, '<strong>$1</strong>')}</div>`
     : '';
   return `
     <h2>스크립트</h2>
-    <div class="practice-sentence">${parsed.html}</div>
-    ${revealBtn}
+    <div class="practice-sentence" style="line-height:2.1;">${parsed.html}</div>
+    ${blankControls}
     <div class="divider">${dividerBars()}</div>
   `;
 }
@@ -348,7 +362,9 @@ function wireAudioControls(stage, { upload }){
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+      });
       chunks = [];
       mediaRecorder = new MediaRecorder(stream);
       mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
@@ -404,6 +420,31 @@ function wireAudioControls(stage, { upload }){
   });
 }
 
+function wireBlankGrading(stage){
+  const checkBtn = document.getElementById('checkBlanksBtn-' + stage);
+  const resultEl = document.getElementById('blankResult-' + stage);
+  if (checkBtn) {
+    checkBtn.addEventListener('click', () => {
+      const inputs = document.querySelectorAll(`[id^="blank-${stage}-"]`);
+      let correct = 0;
+      inputs.forEach(inp => {
+        const answer = (inp.dataset.answer || '').trim().toLowerCase();
+        const given = inp.value.trim().toLowerCase();
+        const isRight = given.length > 0 && given === answer;
+        inp.classList.toggle('blank-correct', isRight);
+        inp.classList.toggle('blank-wrong', !isRight);
+        if (isRight) correct++;
+      });
+      if (resultEl) resultEl.textContent = `${correct} / ${inputs.length}개 정답`;
+    });
+  }
+  const revealBtn = document.getElementById('revealAnswerBtn-' + stage);
+  if (revealBtn) revealBtn.addEventListener('click', () => {
+    const box = document.getElementById('answerBox-' + stage);
+    box.style.display = box.style.display === 'none' ? 'block' : 'none';
+  });
+}
+
 function wireStage(key){
   document.querySelectorAll('[data-goto]').forEach(b => {
     b.addEventListener('click', () => goTo(parseInt(b.dataset.goto, 10)));
@@ -419,11 +460,7 @@ function wireStage(key){
         saveState({ preCheck: pc });
       });
     });
-    const revealBtn = document.getElementById('revealAnswerBtn-preview');
-    if (revealBtn) revealBtn.addEventListener('click', () => {
-      const box = document.getElementById('answerBox-preview');
-      box.style.display = box.style.display === 'none' ? 'block' : 'none';
-    });
+    wireBlankGrading('preview');
     wireAudioControls('preview', { upload: false });
     document.getElementById('nextFromPreview').addEventListener('click', () => { markDone('preview'); renderTracker(); goTo(1); });
   }
@@ -446,11 +483,7 @@ function wireStage(key){
         });
       });
     });
-    const revealBtn = document.getElementById('revealAnswerBtn-review');
-    if (revealBtn) revealBtn.addEventListener('click', () => {
-      const box = document.getElementById('answerBox-review');
-      box.style.display = box.style.display === 'none' ? 'block' : 'none';
-    });
+    wireBlankGrading('review');
     wireAudioControls('review', { upload: false });
     document.getElementById('nextFromReview').addEventListener('click', () => { markDone('review'); renderTracker(); goTo(2); });
   }
