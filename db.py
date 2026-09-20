@@ -54,6 +54,15 @@ def init_db():
             UNIQUE(student_id, lesson_id),
             FOREIGN KEY(student_id) REFERENCES students(id) ON DELETE CASCADE
         );
+
+        CREATE TABLE IF NOT EXISTS lesson_script (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lesson_id TEXT NOT NULL,
+            stage TEXT NOT NULL,
+            script_text TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL,
+            UNIQUE(lesson_id, stage)
+        );
         """
     )
     conn.commit()
@@ -211,6 +220,33 @@ def set_feedback(student_id: int, lesson_id: str, text: str):
         DO UPDATE SET text = excluded.text, updated_at = excluded.updated_at
         """,
         (student_id, lesson_id, text, now_iso()),
+    )
+    conn.commit()
+    conn.close()
+
+
+# ---------- lesson scripts (예습/복습 스크립트, 관리자 페이지에서 편집) ----------
+
+def get_script(lesson_id: str, stage: str) -> str:
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT script_text FROM lesson_script WHERE lesson_id = ? AND stage = ?",
+        (lesson_id, stage),
+    ).fetchone()
+    conn.close()
+    return row["script_text"] if row else ""
+
+
+def set_script(lesson_id: str, stage: str, text: str):
+    conn = get_conn()
+    conn.execute(
+        """
+        INSERT INTO lesson_script (lesson_id, stage, script_text, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(lesson_id, stage)
+        DO UPDATE SET script_text = excluded.script_text, updated_at = excluded.updated_at
+        """,
+        (lesson_id, stage, text, now_iso()),
     )
     conn.commit()
     conn.close()

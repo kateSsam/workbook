@@ -86,6 +86,7 @@
   .rate-scale button { width:32px; height:32px; border-radius:50%; border:1px solid var(--line); background:var(--paper-raised); color:var(--ink-soft); font-size:0.85rem; cursor:pointer; }
   .rate-scale button.picked { background:var(--gold); border-color:var(--gold); color:#fff; }
   .note-box { background:var(--gold-soft); border-radius:10px; padding:14px 16px; font-size:0.88rem; color:var(--ink-soft); margin-top:18px; white-space:pre-wrap; }
+  .blank-slot { display:inline-block; min-width:52px; border-bottom:2px solid var(--teal); color:transparent; user-select:none; }
   .footer-nav { display:flex; justify-content:space-between; margin-top:26px; }
   .up-status { font-size:0.82rem; color:var(--ink-soft); }
   @media (max-width:480px) { .shell{padding:20px 14px 70px;} .card{padding:22px 16px;} .stage-btn{min-width:88px;} }
@@ -176,6 +177,51 @@ function renderStage(i){
   wireStage(s.key);
 }
 
+function parseBlanks(text){
+  // [단어] 형태를 빈칸으로 바꾸고, 정답 목록을 함께 반환
+  const answers = [];
+  const html = text.replace(/\[([^\]]+)\]/g, (m, word) => {
+    answers.push(word.trim());
+    return `<span class="blank-slot">_____</span>`;
+  });
+  return { html, answers, hasBlanks: answers.length > 0 };
+}
+
+function scriptSectionHTML(stage, scriptText){
+  if (!scriptText || !scriptText.trim()) return '';
+  const parsed = parseBlanks(scriptText);
+  const revealBtn = parsed.hasBlanks
+    ? `<button class="btn btn-outline" id="revealAnswerBtn-${stage}" style="margin-top:10px;">정답 보기</button>
+       <div id="answerBox-${stage}" style="display:none;margin-top:10px;" class="note-box">${scriptText.replace(/\[([^\]]+)\]/g, '<strong>$1</strong>')}</div>`
+    : '';
+  return `
+    <h2>스크립트</h2>
+    <div class="practice-sentence">${parsed.html}</div>
+    ${revealBtn}
+    <div class="divider">${dividerBars()}</div>
+  `;
+}
+
+function audioBlockHTML(stage, audioUrl, ttsText){
+  if (!audioUrl && !ttsText) return '';
+  const audioTag = audioUrl ? `<audio id="modelAudioEl" src="${audioUrl}" style="display:none"></audio>` : '';
+  const listenLabel = audioUrl ? '🔊 음원 듣기' : '🔊 음원 듣기 (임시 음성)';
+  return `
+    ${audioTag}
+    <div class="row">
+      <button class="btn btn-outline" id="playModel">${listenLabel}</button>
+      <button class="btn btn-outline" id="playAndRecordBtn">🎧 들으면서 바로 녹음하기</button>
+    </div>
+    <p class="lead" style="margin-top:-6px;">이어폰을 사용하면 스피커 소리가 녹음에 섞이지 않아 더 정확해요.</p>
+    <div class="row">
+      <button class="btn btn-record" id="recordBtn">● 녹음만 시작</button>
+      <span id="recStatus" class="up-status"></span>
+    </div>
+    <div id="recPlayback"></div>
+    <p id="recError" style="color:var(--coral); font-size:0.85rem; display:none;"></p>
+  `;
+}
+
 function previewHTML(){
   const goals = LESSON.preview.goals.map(g => `<li><strong>${g.title}</strong> — ${g.desc}</li>`).join('');
   const checks = LESSON.preview.checklist.map((c, idx) => `
@@ -188,6 +234,9 @@ function previewHTML(){
     <div class="divider">${dividerBars()}</div>
     <h2>훈련 전 체크</h2>
     <ul class="checklist">${checks}</ul>
+    <div class="divider">${dividerBars()}</div>
+    ${scriptSectionHTML('preview', LESSON.preview_script)}
+    ${audioBlockHTML('preview', LESSON.stage_audio.preview, null)}
     <div class="footer-nav">
       <span></span>
       <button class="btn btn-primary" id="nextFromPreview">복습으로 이동 →</button>
@@ -208,6 +257,9 @@ function reviewHTML(){
       </div>
     `;
   });
+  html += `<div class="divider">${dividerBars()}</div>`;
+  html += scriptSectionHTML('review', LESSON.review_script);
+  html += audioBlockHTML('review', LESSON.stage_audio.review, null);
   html += `
     <div class="footer-nav">
       <button class="btn btn-outline" data-goto="0">← 예습</button>
@@ -218,31 +270,12 @@ function reviewHTML(){
 }
 
 function trainingHTML(){
-  const modelBtn = LESSON.model_audio_url
-    ? `<button class="btn btn-outline" id="playModel">🔊 모범 음원 듣기</button>`
-    : `<button class="btn btn-outline" id="playModel">🔊 모범 음원 듣기 (임시 음성)</button>`;
-  const audioEl = LESSON.model_audio_url
-    ? `<audio id="modelAudioEl" src="${LESSON.model_audio_url}" style="display:none"></audio>`
-    : '';
   return `
     <h2>연습 문장</h2>
     <p class="lead">아래 문장을 모범 음원처럼 또렷하게 따라 읽어보세요.</p>
     <div class="practice-sentence">${LESSON.practice_sentence}</div>
-    ${audioEl}
-    <div class="row">
-      ${modelBtn}
-      <button class="btn btn-outline" id="playAndRecordBtn">🎧 들으면서 바로 녹음하기</button>
-    </div>
-    <p class="lead" style="margin-top:-6px;">"들으면서 바로 녹음하기"는 음원 재생과 동시에 내 목소리도 녹음해요. 이어폰을 꼭 껴주세요 (스피커로 재생하면 그 소리도 같이 녹음돼요).</p>
-    <div class="divider">${dividerBars()}</div>
-    <h2>내 목소리로 연습하기</h2>
-    <p class="lead">녹음하면 선생님 서버로 저장돼요. 여러 번 다시 녹음해도 괜찮아요.</p>
-    <div class="row">
-      <button class="btn btn-record" id="recordBtn">● 녹음만 시작</button>
-      <span id="recStatus" class="up-status"></span>
-    </div>
-    <div id="recPlayback"></div>
-    <p id="recError" style="color:var(--coral); font-size:0.85rem; display:none;"></p>
+    ${audioBlockHTML('training', LESSON.stage_audio.training, LESSON.practice_sentence)}
+    <p class="lead" style="margin-top:-10px;">이 단계의 녹음은 선생님 서버로 저장돼서, 나중에 관리자 페이지에서 확인하실 수 있어요.</p>
     <div class="footer-nav">
       <button class="btn btn-outline" data-goto="1">← 복습</button>
       <button class="btn btn-primary" id="nextFromTraining">훈련피드백으로 이동 →</button>
@@ -278,6 +311,99 @@ function feedbackHTML(){
 
 let lastRecordingBlob = null;
 
+function wireAudioControls(stage, { upload }){
+  const playModelBtn = document.getElementById('playModel');
+  if (!playModelBtn) return; // 이 단계에는 음원/녹음 블록이 없음
+
+  function playModel(){
+    const audioEl = document.getElementById('modelAudioEl');
+    if (audioEl) {
+      audioEl.currentTime = 0;
+      audioEl.play().catch(() => {
+        const st = document.getElementById('recStatus');
+        if (st) st.textContent = '음원 재생이 막혔어요. 버튼을 한 번 더 눌러주세요.';
+      });
+      return;
+    }
+    if (stage !== 'training') return;
+    if (!('speechSynthesis' in window)) { alert('이 브라우저는 음성 재생을 지원하지 않아요.'); return; }
+    const u = new SpeechSynthesisUtterance(LESSON.practice_sentence);
+    u.lang = 'ko-KR'; u.rate = 0.92;
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+  }
+  playModelBtn.addEventListener('click', playModel);
+
+  const recordBtn = document.getElementById('recordBtn');
+  const playAndRecordBtn = document.getElementById('playAndRecordBtn');
+  const recStatus = document.getElementById('recStatus');
+  const recError = document.getElementById('recError');
+  const recPlayback = document.getElementById('recPlayback');
+  let mediaRecorder = null, chunks = [], recording = false;
+
+  async function startRecording(){
+    if (recording) return;
+    if (!navigator.mediaDevices || !window.MediaRecorder) {
+      recError.style.display = 'block';
+      recError.textContent = '이 브라우저에서는 녹음 기능을 사용할 수 없어요.';
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      chunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: chunks[0] && chunks[0].type ? chunks[0].type : 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        recPlayback.innerHTML = `<audio controls src="${url}"></audio>`;
+        stream.getTracks().forEach(t => t.stop());
+        if (upload) {
+          lastRecordingBlob = blob;
+          recStatus.textContent = '서버로 업로드하는 중...';
+          try {
+            const fd = new FormData();
+            fd.append('file', blob, 'recording.webm');
+            const res = await fetch(`${API_BASE}/upload?lesson=${encodeURIComponent(LESSON_ID)}`, { method: 'POST', body: fd });
+            if (res.ok) { recStatus.textContent = '업로드 완료! 선생님이 확인하실 수 있어요.'; saveState({ hasRecording: true }); }
+            else { recStatus.textContent = '업로드에 실패했어요. 다시 시도해주세요.'; }
+          } catch (e) { recStatus.textContent = '업로드에 실패했어요. 인터넷 연결을 확인해주세요.'; }
+        } else {
+          recStatus.textContent = '녹음 완료! (이 단계는 본인 확인용이라 서버에는 저장되지 않아요)';
+        }
+      };
+      mediaRecorder.start();
+      recording = true;
+      recordBtn.textContent = '■ 녹음 멈추기';
+      recordBtn.classList.add('recording');
+      playAndRecordBtn.disabled = true;
+      recStatus.textContent = '녹음 중...';
+      recError.style.display = 'none';
+    } catch (err) {
+      recError.style.display = 'block';
+      recError.textContent = '마이크 권한을 허용해주셔야 녹음할 수 있어요.';
+    }
+  }
+
+  function stopRecording(){
+    if (!recording) return;
+    mediaRecorder.stop();
+    recording = false;
+    recordBtn.textContent = '● 녹음만 시작';
+    recordBtn.classList.remove('recording');
+    playAndRecordBtn.disabled = false;
+    playAndRecordBtn.textContent = '🎧 들으면서 바로 녹음하기';
+  }
+
+  recordBtn.addEventListener('click', () => { recording ? stopRecording() : startRecording(); });
+
+  playAndRecordBtn.addEventListener('click', async () => {
+    if (recording) { stopRecording(); return; }
+    playModel(); // 반드시 마이크 권한 대기(await)보다 먼저, 클릭 이벤트 안에서 동기적으로 실행해야 브라우저가 재생을 막지 않음
+    await startRecording();
+    playAndRecordBtn.textContent = '■ 재생+녹음 멈추기';
+  });
+}
+
 function wireStage(key){
   document.querySelectorAll('[data-goto]').forEach(b => {
     b.addEventListener('click', () => goTo(parseInt(b.dataset.goto, 10)));
@@ -293,6 +419,12 @@ function wireStage(key){
         saveState({ preCheck: pc });
       });
     });
+    const revealBtn = document.getElementById('revealAnswerBtn-preview');
+    if (revealBtn) revealBtn.addEventListener('click', () => {
+      const box = document.getElementById('answerBox-preview');
+      box.style.display = box.style.display === 'none' ? 'block' : 'none';
+    });
+    wireAudioControls('preview', { upload: false });
     document.getElementById('nextFromPreview').addEventListener('click', () => { markDone('preview'); renderTracker(); goTo(1); });
   }
 
@@ -314,94 +446,20 @@ function wireStage(key){
         });
       });
     });
+    const revealBtn = document.getElementById('revealAnswerBtn-review');
+    if (revealBtn) revealBtn.addEventListener('click', () => {
+      const box = document.getElementById('answerBox-review');
+      box.style.display = box.style.display === 'none' ? 'block' : 'none';
+    });
+    wireAudioControls('review', { upload: false });
     document.getElementById('nextFromReview').addEventListener('click', () => { markDone('review'); renderTracker(); goTo(2); });
   }
 
   if (key === 'training') {
-    function playModel(){
-      const audioEl = document.getElementById('modelAudioEl');
-      if (audioEl) {
-        audioEl.currentTime = 0;
-        audioEl.play().catch(() => {});
-        return;
-      }
-      if (!('speechSynthesis' in window)) { alert('이 브라우저는 음성 재생을 지원하지 않아요.'); return; }
-      const u = new SpeechSynthesisUtterance(LESSON.practice_sentence);
-      u.lang = 'ko-KR'; u.rate = 0.92;
-      speechSynthesis.cancel(); speechSynthesis.speak(u);
-    }
-
-    const playBtn = document.getElementById('playModel');
-    if (playBtn) playBtn.addEventListener('click', playModel);
-
-    const recordBtn = document.getElementById('recordBtn');
-    const playAndRecordBtn = document.getElementById('playAndRecordBtn');
-    const recStatus = document.getElementById('recStatus');
-    const recError = document.getElementById('recError');
-    const recPlayback = document.getElementById('recPlayback');
-    let mediaRecorder = null, chunks = [], recording = false;
-
-    async function startRecording(){
-      if (recording) return;
-      if (!navigator.mediaDevices || !window.MediaRecorder) {
-        recError.style.display = 'block';
-        recError.textContent = '이 브라우저에서는 녹음 기능을 사용할 수 없어요.';
-        return;
-      }
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        chunks = [];
-        mediaRecorder = new MediaRecorder(stream);
-        mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-        mediaRecorder.onstop = async () => {
-          const blob = new Blob(chunks, { type: chunks[0] && chunks[0].type ? chunks[0].type : 'audio/webm' });
-          lastRecordingBlob = blob;
-          const url = URL.createObjectURL(blob);
-          recPlayback.innerHTML = `<audio controls src="${url}"></audio>`;
-          stream.getTracks().forEach(t => t.stop());
-          recStatus.textContent = '서버로 업로드하는 중...';
-          try {
-            const fd = new FormData();
-            fd.append('file', blob, 'recording.webm');
-            const res = await fetch(`${API_BASE}/upload?lesson=${encodeURIComponent(LESSON_ID)}`, { method: 'POST', body: fd });
-            if (res.ok) { recStatus.textContent = '업로드 완료! 선생님이 확인하실 수 있어요.'; saveState({ hasRecording: true }); }
-            else { recStatus.textContent = '업로드에 실패했어요. 다시 시도해주세요.'; }
-          } catch (e) { recStatus.textContent = '업로드에 실패했어요. 인터넷 연결을 확인해주세요.'; }
-        };
-        mediaRecorder.start();
-        recording = true;
-        recordBtn.textContent = '■ 녹음 멈추기';
-        recordBtn.classList.add('recording');
-        playAndRecordBtn.disabled = true;
-        recStatus.textContent = '녹음 중...';
-        recError.style.display = 'none';
-      } catch (err) {
-        recError.style.display = 'block';
-        recError.textContent = '마이크 권한을 허용해주셔야 녹음할 수 있어요.';
-      }
-    }
-
-    function stopRecording(){
-      if (!recording) return;
-      mediaRecorder.stop();
-      recording = false;
-      recordBtn.textContent = '● 녹음만 시작';
-      recordBtn.classList.remove('recording');
-      playAndRecordBtn.disabled = false;
-      playAndRecordBtn.textContent = '🎧 들으면서 바로 녹음하기';
-    }
-
-    recordBtn.addEventListener('click', () => { recording ? stopRecording() : startRecording(); });
-
-    playAndRecordBtn.addEventListener('click', async () => {
-      if (recording) { stopRecording(); return; }
-      await startRecording();
-      playModel();
-      playAndRecordBtn.textContent = '■ 재생+녹음 멈추기';
-    });
-
+    wireAudioControls('training', { upload: true });
     document.getElementById('nextFromTraining').addEventListener('click', () => { markDone('training'); renderTracker(); goTo(3); });
   }
+
 
   if (key === 'feedback') {
     document.querySelectorAll('.rate-scale').forEach(scale => {

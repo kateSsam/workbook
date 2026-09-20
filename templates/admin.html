@@ -30,7 +30,7 @@
   .pill.done { background:var(--teal); color:#fff; }
   .recordings { margin-top:10px; }
   .recordings audio { width:100%; margin:4px 0 10px; }
-  .fb-form textarea { width:100%; min-height:60px; padding:10px; border:1px solid var(--line); border-radius:8px; font-family:inherit; margin-bottom:8px; }
+  .fb-form textarea, textarea { width:100%; min-height:60px; padding:10px; border:1px solid var(--line); border-radius:8px; font-family:inherit; margin-bottom:8px; background:var(--paper-raised); color:var(--ink); }
   .empty { color:var(--ink-soft); font-size:0.9rem; }
   .copy-btn { font-size:0.75rem; padding:3px 9px; }
 </style>
@@ -49,23 +49,46 @@
   </div>
 
   <div class="panel">
-    <h3 style="margin:0 0 10px;font-family:'Noto Serif KR',serif;font-size:1.05rem;">차시별 모범 음원</h3>
-    <p class="sub" style="margin-bottom:16px;">여기서 mp3 파일을 올리면, 학생 화면의 "모범 음원 듣기" 자리에 바로 반영돼요 (재배포 필요 없음).</p>
+    <h3 style="margin:0 0 10px;font-family:'Noto Serif KR',serif;font-size:1.05rem;">차시별 콘텐츠 관리</h3>
+    <p class="sub" style="margin-bottom:16px;">여기서 올리고 저장하면 코드 수정이나 재배포 없이 바로 학생 화면에 반영돼요.</p>
+    {% set stage_labels = {'preview': '예습', 'review': '복습', 'training': '훈련'} %}
     {% for lid, ldata in lessons.items() %}
-      <div style="padding:12px 0;border-top:1px solid var(--line);">
-        <div style="font-weight:700;margin-bottom:6px;">{{ ldata.tag }} — {{ ldata.title }}</div>
-        {% if lesson_audio_info.get(lid) %}
-          <audio controls src="/lesson-audio/{{ lid }}" style="width:100%;margin-bottom:8px;"></audio>
-          <div class="empty" style="margin-bottom:8px;">현재 파일: {{ lesson_audio_info.get(lid) }}</div>
-        {% else %}
-          <p class="empty" style="margin-bottom:8px;">아직 업로드된 음원이 없어요. 지금은 임시 음성(TTS)으로 재생돼요.</p>
-        {% endif %}
-        <form method="post" action="/admin/lesson-audio" enctype="multipart/form-data" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <input type="hidden" name="key" value="{{ key }}">
-          <input type="hidden" name="lesson_id" value="{{ lid }}">
-          <input type="file" name="file" accept="audio/*" required>
-          <button type="submit" class="btn-primary">{{ '교체 업로드' if lesson_audio_info.get(lid) else '음원 업로드' }}</button>
-        </form>
+      <div style="padding:14px 0;border-top:1px solid var(--line);">
+        <div style="font-weight:700;margin-bottom:10px;">{{ ldata.tag }} — {{ ldata.title }}</div>
+
+        {% for stage in stages_with_audio %}
+          <div style="margin-bottom:14px;">
+            <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:6px;">{{ stage_labels[stage] }} 음원</div>
+            {% if lesson_audio_info.get(lid, {}).get(stage) %}
+              <audio controls src="/lesson-audio/{{ lid }}?stage={{ stage }}" style="width:100%;margin-bottom:6px;"></audio>
+              <div class="empty" style="margin-bottom:6px;">현재 파일: {{ lesson_audio_info[lid][stage] }}</div>
+            {% else %}
+              <p class="empty" style="margin-bottom:6px;">
+                {% if stage == 'training' %}아직 업로드된 음원이 없어요. 지금은 임시 음성(TTS)으로 재생돼요.{% else %}아직 업로드된 음원이 없어요. 없으면 이 단계에는 음원 버튼이 안 보여요.{% endif %}
+              </p>
+            {% endif %}
+            <form method="post" action="/admin/lesson-audio" enctype="multipart/form-data" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <input type="hidden" name="key" value="{{ key }}">
+              <input type="hidden" name="lesson_id" value="{{ lid }}">
+              <input type="hidden" name="stage" value="{{ stage }}">
+              <input type="file" name="file" accept="audio/*" required>
+              <button type="submit" class="btn-outline">{{ '교체 업로드' if lesson_audio_info.get(lid, {}).get(stage) else '음원 업로드' }}</button>
+            </form>
+          </div>
+        {% endfor %}
+
+        {% for stage in ['preview', 'review'] %}
+          <div style="margin-bottom:6px;">
+            <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:6px;">{{ stage_labels[stage] }} 스크립트 (대괄호로 감싼 단어는 학생 화면에서 빈칸 문제로 표시돼요, 예: 저는 [지우]입니다)</div>
+            <form method="post" action="/admin/script">
+              <input type="hidden" name="key" value="{{ key }}">
+              <input type="hidden" name="lesson_id" value="{{ lid }}">
+              <input type="hidden" name="stage" value="{{ stage }}">
+              <textarea name="text" placeholder="예: Hi, my name is [Jiwoo] and I'm from [Seoul]." style="min-height:70px;">{{ lesson_scripts.get(lid, {}).get(stage, '') }}</textarea>
+              <button type="submit" class="btn-outline" style="margin-top:6px;">스크립트 저장</button>
+            </form>
+          </div>
+        {% endfor %}
       </div>
     {% endfor %}
   </div>

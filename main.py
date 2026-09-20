@@ -44,9 +44,19 @@ def seed_lesson_audio():
 seed_lesson_audio()
 
 
-def find_lesson_audio(lesson_id: str) -> Optional[str]:
-    matches = glob.glob(os.path.join(AUDIO_DIR, f"{lesson_id}.*"))
-    return matches[0] if matches else None
+def find_lesson_audio(lesson_id: str, stage: str = "training") -> Optional[str]:
+    matches = glob.glob(os.path.join(AUDIO_DIR, f"{lesson_id}_{stage}.*"))
+    if matches:
+        return matches[0]
+    if stage == "training":
+        # 이전 버전과의 호환: stage 구분 없이 올렸던 훈련 음원 (예: lesson1.mp3)
+        legacy = glob.glob(os.path.join(AUDIO_DIR, f"{lesson_id}.*"))
+        if legacy:
+            return legacy[0]
+    return None
+
+
+STAGES_WITH_AUDIO = ["preview", "review", "training"]
 
 
 def check_admin(key: Optional[str]):
@@ -77,9 +87,13 @@ def workbook(request: Request, token: str, lesson: str = lessons.DEFAULT_LESSON_
         raise HTTPException(status_code=404, detail="존재하지 않는 차시입니다.")
 
     lesson_data = dict(base_lesson)
-    lesson_data["model_audio_url"] = (
-        f"/lesson-audio/{lesson}" if find_lesson_audio(lesson) else None
-    )
+    lesson_data["stage_audio"] = {
+        stage: (f"/lesson-audio/{lesson}?stage={stage}" if find_lesson_audio(lesson, stage) else None)
+        for stage in STAGES_WITH_AUDIO
+    }
+    lesson_data["model_audio_url"] = lesson_data["stage_audio"]["training"]
+    lesson_data["preview_script"] = db.get_script(lesson, "preview")
+    lesson_data["review_script"] = db.get_script(lesson, "review")
 
     state = db.get_progress(student["id"], lesson)
     feedback_text = db.get_feedback(student["id"], lesson)
@@ -117,10 +131,10 @@ async def api_save_state(request: Request, token: str, lesson: str = lessons.DEF
 
 
 @app.get("/lesson-audio/{lesson_id}")
-def get_lesson_audio(lesson_id: str):
-    path = find_lesson_audio(lesson_id)
+def get_lesson_audio(lesson_id: str, stage: str = "training"):
+    path = find_lesson_audio(lesson_id, stage)
     if not path:
-        raise HTTPException(status_code=404, detail="아직 등록된 모범 음원이 없어요.")
+        raise HTTPException(status_code=404, detail="아직 등록된 음원이 없어요.")
     media_type, _ = mimetypes.guess_type(path)
     return FileResponse(path, media_type=media_type or "audio/mpeg")
 
@@ -181,7 +195,17 @@ def admin_home(request: Request, key: Optional[str] = None):
         )
 
     lesson_audio_info = {
-        lid: (os.path.basename(find_lesson_audio(lid)) if find_lesson_audio(lid) else None)
+        lid: {
+            stage: (os.path.basename(find_lesson_audio(lid, stage)) if find_lesson_audio(lid, stage) else None)
+            for stage in STAGES_WITH_AUDIO
+        }
+        for lid in lessons.LESSONS.keys()
+    }
+    lesson_scripts = {
+        lid: {
+            "preview": db.get_script(lid, "preview"),
+            "review": db.get_script(lid, "review"),
+        }
         for lid in lessons.LESSONS.keys()
     }
 
@@ -193,6 +217,8 @@ def admin_home(request: Request, key: Optional[str] = None):
             "students": students_view,
             "lessons": lessons.LESSONS,
             "lesson_audio_info": lesson_audio_info,
+            "lesson_scripts": lesson_scripts,
+            "stages_with_audio": STAGES_WITH_AUDIO,
         },
     )
 
@@ -201,24 +227,46 @@ def admin_home(request: Request, key: Optional[str] = None):
 async def admin_upload_lesson_audio(
     key: str = Form(...),
     lesson_id: str = Form(...),
+    stage: str = Form(...),
     file: UploadFile = File(...),
 ):
     check_admin(key)
     if lesson_id not in lessons.LESSONS:
         raise HTTPException(status_code=404, detail="존재하지 않는 차시입니다.")
+    if stage not in STAGES_WITH_AUDIO:
+        raise HTTPException(status_code=400, detail="알 수 없는 단계입니다.")
 
-    # 기존 파일(확장자 다를 수 있음) 제거 후 새로 저장
-    for old in glob.glob(os.path.join(AUDIO_DIR, f"{lesson_id}.*")):
+    # 기존 파일(확장자 다를 수 있음, 이전 버전 파일명 포함) 제거 후 새로 저장
+    for old in glob.glob(os.path.join(AUDIO_DIR, f"{lesson_id}_{stage}.*")):
         os.remove(old)
+    if stage == "training":
+        for old in glob.glob(os.path.join(AUDIO_DIR, f"{lesson_id}.*")):
+            os.remove(old)
 
     ext = ".mp3"
     if file.filename and "." in file.filename:
         ext = "." + file.filename.rsplit(".", 1)[-1]
-    dest_path = os.path.join(AUDIO_DIR, f"{lesson_id}{ext}")
+    dest_path = os.path.join(AUDIO_DIR, f"{lesson_id}_{stage}{ext}")
     content = await file.read()
     with open(dest_path, "wb") as f:
         f.write(content)
 
+    return RedirectResponse(url=f"/admin?key={key}", status_code=303)
+
+
+@app.post("/admin/script")
+def admin_save_script(
+    key: str = Form(...),
+    lesson_id: str = Form(...),
+    stage: str = Form(...),
+    text: str = Form(""),
+):
+    check_admin(key)
+    if lesson_id not in lessons.LESSONS:
+        raise HTTPException(status_code=404, detail="존재하지 않는 차시입니다.")
+    if stage not in ("preview", "review"):
+        raise HTTPException(status_code=400, detail="알 수 없는 단계입니다.")
+    db.set_script(lesson_id, stage, text)
     return RedirectResponse(url=f"/admin?key={key}", status_code=303)
 
 
