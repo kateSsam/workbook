@@ -178,13 +178,21 @@ function renderStage(i){
   wireStage(s.key);
 }
 
-function writingSectionHTML(stage){
+function writingSectionHTML(stage, answerText){
   const value = (state.myScript && state.myScript[stage]) || '';
+  const hasAnswer = answerText && answerText.trim();
+  const answerControls = hasAnswer
+    ? `<div class="row" style="margin-top:10px;">
+         <button class="btn btn-outline" id="revealAnswerBtn-${stage}">정답 보기</button>
+       </div>
+       <div id="answerBox-${stage}" style="display:none;margin-top:10px;" class="note-box">${answerText}</div>`
+    : '';
   return `
     <h2>내가 들은 내용을 적어보세요</h2>
-    <p class="lead">음원을 들으며 이해한 내용을 자유롭게 타이핑해보세요. 정답 스크립트는 선생님이 따로 알려주실 거예요.</p>
+    <p class="lead">음원을 들으며 이해한 내용을 자유롭게 타이핑해보세요.</p>
     <textarea id="myScript-${stage}" style="min-height:130px;" placeholder="여기에 적어보세요...">${value}</textarea>
     <p id="scriptSaveStatus-${stage}" class="up-status"></p>
+    ${answerControls}
     <div class="divider">${dividerBars()}</div>
   `;
 }
@@ -226,7 +234,7 @@ function previewHTML(){
     <h2>훈련 전 체크</h2>
     <ul class="checklist">${checks}</ul>
     <div class="divider">${dividerBars()}</div>
-    ${writingSectionHTML('preview')}
+    ${writingSectionHTML('preview', LESSON.preview_answer)}
     ${audioBlockHTML('preview', LESSON.stage_audio.preview, null)}
     <p class="lead" style="margin-top:-6px;">이 단계의 녹음은 본인 확인용이에요 (서버에 저장되지 않아요).</p>
     <div class="footer-nav">
@@ -263,7 +271,7 @@ function reviewHTML(){
   return `
     <h2>복습</h2>
     ${caution}
-    ${writingSectionHTML('review')}
+    ${writingSectionHTML('review', LESSON.review_answer)}
     ${audioBlockHTML('review', LESSON.stage_audio.review, null)}
     <p class="lead" style="margin-top:-6px;">이 단계의 녹음은 선생님 서버로 저장돼서, 선생님이 확인하실 수 있어요.</p>
     <div class="divider">${dividerBars()}</div>
@@ -377,6 +385,12 @@ function wireAudioControls(stage, { upload }){
 }
 
 function wireWritingBox(stage){
+  const revealBtn = document.getElementById('revealAnswerBtn-' + stage);
+  if (revealBtn) revealBtn.addEventListener('click', () => {
+    const box = document.getElementById('answerBox-' + stage);
+    box.style.display = box.style.display === 'none' ? 'block' : 'none';
+  });
+
   const box = document.getElementById('myScript-' + stage);
   if (!box) return;
   const statusEl = document.getElementById('scriptSaveStatus-' + stage);

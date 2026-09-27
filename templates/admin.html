@@ -78,6 +78,18 @@
           </div>
         {% endfor %}
 
+        {% for stage in ['preview', 'review'] %}
+          <div style="margin-bottom:10px;">
+            <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:6px;">{{ stage_labels[stage] }} 정답 스크립트 (학생이 "정답 보기"로 확인할 수 있어요)</div>
+            <form method="post" action="/admin/answer-script">
+              <input type="hidden" name="key" value="{{ key }}">
+              <input type="hidden" name="lesson_id" value="{{ lid }}">
+              <input type="hidden" name="stage" value="{{ stage }}">
+              <textarea name="text" placeholder="정답 스크립트를 그대로 입력해주세요." style="min-height:70px;">{{ lesson_answers.get(lid, {}).get(stage, '') }}</textarea>
+              <button type="submit" class="btn-outline" style="margin-top:6px;">정답 스크립트 저장</button>
+            </form>
+          </div>
+        {% endfor %}
       </div>
     {% endfor %}
   </div>
