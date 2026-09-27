@@ -91,8 +91,6 @@ def workbook(request: Request, token: str, lesson: str = lessons.DEFAULT_LESSON_
         stage: (f"/lesson-audio/{lesson}?stage={stage}" if find_lesson_audio(lesson, stage) else None)
         for stage in STAGES_WITH_AUDIO
     }
-    lesson_data["preview_script"] = db.get_script(lesson, "preview")
-    lesson_data["review_script"] = db.get_script(lesson, "review")
 
     state = db.get_progress(student["id"], lesson)
     feedback_text = db.get_feedback(student["id"], lesson)
@@ -204,13 +202,6 @@ def admin_home(request: Request, key: Optional[str] = None):
         lid: {stage: display_audio_name(lid, stage) for stage in STAGES_WITH_AUDIO}
         for lid in lessons.LESSONS.keys()
     }
-    lesson_scripts = {
-        lid: {
-            "preview": db.get_script(lid, "preview"),
-            "review": db.get_script(lid, "review"),
-        }
-        for lid in lessons.LESSONS.keys()
-    }
 
     return templates.TemplateResponse(
         "admin.html",
@@ -220,7 +211,6 @@ def admin_home(request: Request, key: Optional[str] = None):
             "students": students_view,
             "lessons": lessons.LESSONS,
             "lesson_audio_info": lesson_audio_info,
-            "lesson_scripts": lesson_scripts,
             "stages_with_audio": STAGES_WITH_AUDIO,
         },
     )
@@ -256,22 +246,6 @@ async def admin_upload_lesson_audio(
 
     db.set_audio_original_name(lesson_id, stage, file.filename or f"{lesson_id}_{stage}{ext}")
 
-    return RedirectResponse(url=f"/admin?key={key}", status_code=303)
-
-
-@app.post("/admin/script")
-def admin_save_script(
-    key: str = Form(...),
-    lesson_id: str = Form(...),
-    stage: str = Form(...),
-    text: str = Form(""),
-):
-    check_admin(key)
-    if lesson_id not in lessons.LESSONS:
-        raise HTTPException(status_code=404, detail="존재하지 않는 차시입니다.")
-    if stage not in ("preview", "review"):
-        raise HTTPException(status_code=400, detail="알 수 없는 단계입니다.")
-    db.set_script(lesson_id, stage, text)
     return RedirectResponse(url=f"/admin?key={key}", status_code=303)
 
 

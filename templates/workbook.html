@@ -70,6 +70,8 @@
   @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(217,97,63,0.4);} 50%{box-shadow:0 0 0 8px rgba(217,97,63,0);} }
   .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
   audio { width:100%; margin-top:8px; }
+  textarea { width:100%; padding:14px 16px; border:1px solid var(--line); border-radius:10px; font-family:inherit; font-size:0.98rem; color:var(--ink); background:var(--paper-raised); resize:vertical; }
+  textarea:focus { outline:none; border-color:var(--teal); }
   .quiz-q { margin-bottom:20px; }
   .quiz-q .q-text { font-weight:700; margin-bottom:10px; }
   .quiz-opts { display:flex; flex-direction:column; gap:8px; }
@@ -176,37 +178,13 @@ function renderStage(i){
   wireStage(s.key);
 }
 
-function escapeAttr(s){
-  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-function parseBlanks(text, stage){
-  // [단어] 형태를 실제 입력 가능한 빈칸으로 바꾸고, 정답 목록을 함께 반환
-  const answers = [];
-  const html = text.replace(/\[([^\]]+)\]/g, (m, word) => {
-    const idx = answers.length;
-    answers.push(word.trim());
-    const w = Math.max(3, Math.min(14, word.trim().length + 2));
-    return `<input type="text" class="blank-input" id="blank-${stage}-${idx}" data-answer="${escapeAttr(word.trim())}" style="width:${w}ch" autocomplete="off" autocapitalize="off" spellcheck="false">`;
-  });
-  return { html, answers, hasBlanks: answers.length > 0 };
-}
-
-function scriptSectionHTML(stage, scriptText){
-  if (!scriptText || !scriptText.trim()) return '';
-  const parsed = parseBlanks(scriptText, stage);
-  const blankControls = parsed.hasBlanks
-    ? `<div class="row" style="margin-top:14px;">
-         <button class="btn btn-primary" id="checkBlanksBtn-${stage}">채점하기</button>
-         <button class="btn btn-outline" id="revealAnswerBtn-${stage}">정답 보기</button>
-         <span id="blankResult-${stage}" class="up-status"></span>
-       </div>
-       <div id="answerBox-${stage}" style="display:none;margin-top:10px;" class="note-box">${scriptText.replace(/\[([^\]]+)\]/g, '<strong>$1</strong>')}</div>`
-    : '';
+function writingSectionHTML(stage){
+  const value = (state.myScript && state.myScript[stage]) || '';
   return `
-    <h2>스크립트</h2>
-    <div class="practice-sentence" style="line-height:2.1;">${parsed.html}</div>
-    ${blankControls}
+    <h2>내가 들은 내용을 적어보세요</h2>
+    <p class="lead">음원을 들으며 이해한 내용을 자유롭게 타이핑해보세요. 정답 스크립트는 선생님이 따로 알려주실 거예요.</p>
+    <textarea id="myScript-${stage}" style="min-height:130px;" placeholder="여기에 적어보세요...">${value}</textarea>
+    <p id="scriptSaveStatus-${stage}" class="up-status"></p>
     <div class="divider">${dividerBars()}</div>
   `;
 }
@@ -219,15 +197,19 @@ function audioBlockHTML(stage, audioUrl, ttsText){
     ${audioTag}
     <div class="row">
       <button class="btn btn-outline" id="playModel">${listenLabel}</button>
-      <button class="btn btn-outline" id="playAndRecordBtn">🎧 들으면서 바로 녹음하기</button>
     </div>
-    <p class="lead" style="margin-top:-6px;">이어폰을 사용하면 스피커 소리가 녹음에 섞이지 않아 더 정확해요.</p>
     <div class="row">
-      <button class="btn btn-record" id="recordBtn">● 녹음만 시작</button>
+      <button class="btn btn-record" id="recordBtn">● 내 목소리만 녹음하기</button>
       <span id="recStatus" class="up-status"></span>
     </div>
+    <p class="lead" style="margin-top:-6px;">음원을 먼저 듣고 나서 이 버튼으로 녹음하면, 학생 목소리만 깨끗하게 녹음돼요.</p>
     <div id="recPlayback"></div>
     <p id="recError" style="color:var(--coral); font-size:0.85rem; display:none;"></p>
+    <div class="divider">${dividerBars()}</div>
+    <div class="row">
+      <button class="btn btn-outline" id="playAndRecordBtn">🎧 음원과 동시에 녹음 (실시간 비교용)</button>
+    </div>
+    <p class="lead" style="margin-top:-6px;">이어폰 없이 스피커로 들으면, 음원 소리가 녹음에 함께 섞여요. 깨끗한 녹음이 필요하면 위의 "내 목소리만 녹음하기"를 사용해주세요.</p>
   `;
 }
 
@@ -244,7 +226,7 @@ function previewHTML(){
     <h2>훈련 전 체크</h2>
     <ul class="checklist">${checks}</ul>
     <div class="divider">${dividerBars()}</div>
-    ${scriptSectionHTML('preview', LESSON.preview_script)}
+    ${writingSectionHTML('preview')}
     ${audioBlockHTML('preview', LESSON.stage_audio.preview, null)}
     <p class="lead" style="margin-top:-6px;">이 단계의 녹음은 본인 확인용이에요 (서버에 저장되지 않아요).</p>
     <div class="footer-nav">
@@ -281,7 +263,7 @@ function reviewHTML(){
   return `
     <h2>복습</h2>
     ${caution}
-    ${scriptSectionHTML('review', LESSON.review_script)}
+    ${writingSectionHTML('review')}
     ${audioBlockHTML('review', LESSON.stage_audio.review, null)}
     <p class="lead" style="margin-top:-6px;">이 단계의 녹음은 선생님 서버로 저장돼서, 선생님이 확인하실 수 있어요.</p>
     <div class="divider">${dividerBars()}</div>
@@ -394,28 +376,25 @@ function wireAudioControls(stage, { upload }){
   });
 }
 
-function wireBlankGrading(stage){
-  const checkBtn = document.getElementById('checkBlanksBtn-' + stage);
-  const resultEl = document.getElementById('blankResult-' + stage);
-  if (checkBtn) {
-    checkBtn.addEventListener('click', () => {
-      const inputs = document.querySelectorAll(`[id^="blank-${stage}-"]`);
-      let correct = 0;
-      inputs.forEach(inp => {
-        const answer = (inp.dataset.answer || '').trim().toLowerCase();
-        const given = inp.value.trim().toLowerCase();
-        const isRight = given.length > 0 && given === answer;
-        inp.classList.toggle('blank-correct', isRight);
-        inp.classList.toggle('blank-wrong', !isRight);
-        if (isRight) correct++;
-      });
-      if (resultEl) resultEl.textContent = `${correct} / ${inputs.length}개 정답`;
-    });
-  }
-  const revealBtn = document.getElementById('revealAnswerBtn-' + stage);
-  if (revealBtn) revealBtn.addEventListener('click', () => {
-    const box = document.getElementById('answerBox-' + stage);
-    box.style.display = box.style.display === 'none' ? 'block' : 'none';
+function wireWritingBox(stage){
+  const box = document.getElementById('myScript-' + stage);
+  if (!box) return;
+  const statusEl = document.getElementById('scriptSaveStatus-' + stage);
+  let saveTimer = null;
+  box.addEventListener('input', () => {
+    if (statusEl) statusEl.textContent = '입력 중...';
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      const myScript = Object.assign({}, state.myScript, { [stage]: box.value });
+      await saveState({ myScript });
+      if (statusEl) statusEl.textContent = '저장됐어요.';
+    }, 800);
+  });
+  box.addEventListener('blur', () => {
+    clearTimeout(saveTimer);
+    const myScript = Object.assign({}, state.myScript, { [stage]: box.value });
+    saveState({ myScript });
+    if (statusEl) statusEl.textContent = '저장됐어요.';
   });
 }
 
@@ -434,13 +413,13 @@ function wireStage(key){
         saveState({ preCheck: pc });
       });
     });
-    wireBlankGrading('preview');
+    wireWritingBox('preview');
     wireAudioControls('preview', { upload: false });
     document.getElementById('nextFromPreview').addEventListener('click', () => { markDone('preview'); renderTracker(); goTo(1); });
   }
 
   if (key === 'review') {
-    wireBlankGrading('review');
+    wireWritingBox('review');
     wireAudioControls('review', { upload: true });
 
     document.querySelectorAll('.rate-scale').forEach(scale => {

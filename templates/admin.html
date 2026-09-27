@@ -32,6 +32,7 @@
   .recordings audio { width:100%; margin:4px 0 10px; }
   .fb-form textarea, textarea { width:100%; min-height:60px; padding:10px; border:1px solid var(--line); border-radius:8px; font-family:inherit; margin-bottom:8px; background:var(--paper-raised); color:var(--ink); }
   .empty { color:var(--ink-soft); font-size:0.9rem; }
+  .note-box { background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:0.9rem; color:var(--ink); white-space:pre-wrap; }
   .copy-btn { font-size:0.75rem; padding:3px 9px; }
 </style>
 </head>
@@ -77,18 +78,6 @@
           </div>
         {% endfor %}
 
-        {% for stage in ['preview', 'review'] %}
-          <div style="margin-bottom:6px;">
-            <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:6px;">{{ stage_labels[stage] }} 스크립트 (대괄호로 감싼 단어는 학생 화면에서 빈칸 문제로 표시돼요, 예: 저는 [지우]입니다)</div>
-            <form method="post" action="/admin/script">
-              <input type="hidden" name="key" value="{{ key }}">
-              <input type="hidden" name="lesson_id" value="{{ lid }}">
-              <input type="hidden" name="stage" value="{{ stage }}">
-              <textarea name="text" placeholder="예: Hi, my name is [Jiwoo] and I'm from [Seoul]." style="min-height:70px;">{{ lesson_scripts.get(lid, {}).get(stage, '') }}</textarea>
-              <button type="submit" class="btn-outline" style="margin-top:6px;">스크립트 저장</button>
-            </form>
-          </div>
-        {% endfor %}
       </div>
     {% endfor %}
   </div>
@@ -125,6 +114,16 @@
         <span class="pill {{ 'done' if done.get('preview') }}">예습</span>
         <span class="pill {{ 'done' if done.get('review') }}">복습</span>
       </div>
+
+      {% set my_script = st.get('myScript', {}) %}
+      {% for stage in ['preview', 'review'] %}
+        {% if my_script.get(stage) %}
+          <div style="margin-bottom:10px;">
+            <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:4px;">{{ stage_labels[stage] }} 때 학생이 적은 내용</div>
+            <div class="note-box" style="margin-top:0;">{{ my_script.get(stage) }}</div>
+          </div>
+        {% endif %}
+      {% endfor %}
 
       <div class="recordings">
         {% set recs = sv.recordings | selectattr('lesson_id', 'equalto', lid) | list %}
