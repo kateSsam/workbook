@@ -63,6 +63,15 @@ def init_db():
             updated_at TEXT NOT NULL,
             UNIQUE(lesson_id, stage)
         );
+
+        CREATE TABLE IF NOT EXISTS lesson_audio_meta (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lesson_id TEXT NOT NULL,
+            stage TEXT NOT NULL,
+            original_filename TEXT NOT NULL DEFAULT '',
+            updated_at TEXT NOT NULL,
+            UNIQUE(lesson_id, stage)
+        );
         """
     )
     conn.commit()
@@ -220,6 +229,33 @@ def set_feedback(student_id: int, lesson_id: str, text: str):
         DO UPDATE SET text = excluded.text, updated_at = excluded.updated_at
         """,
         (student_id, lesson_id, text, now_iso()),
+    )
+    conn.commit()
+    conn.close()
+
+
+# ---------- lesson audio metadata (선생님이 올린 원래 파일명 기억) ----------
+
+def get_audio_original_name(lesson_id: str, stage: str) -> str:
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT original_filename FROM lesson_audio_meta WHERE lesson_id = ? AND stage = ?",
+        (lesson_id, stage),
+    ).fetchone()
+    conn.close()
+    return row["original_filename"] if row else ""
+
+
+def set_audio_original_name(lesson_id: str, stage: str, filename: str):
+    conn = get_conn()
+    conn.execute(
+        """
+        INSERT INTO lesson_audio_meta (lesson_id, stage, original_filename, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(lesson_id, stage)
+        DO UPDATE SET original_filename = excluded.original_filename, updated_at = excluded.updated_at
+        """,
+        (lesson_id, stage, filename, now_iso()),
     )
     conn.commit()
     conn.close()

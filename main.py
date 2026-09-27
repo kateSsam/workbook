@@ -193,11 +193,15 @@ def admin_home(request: Request, key: Optional[str] = None):
             }
         )
 
+    def display_audio_name(lid, stage):
+        path = find_lesson_audio(lid, stage)
+        if not path:
+            return None
+        original = db.get_audio_original_name(lid, stage)
+        return original if original else os.path.basename(path)
+
     lesson_audio_info = {
-        lid: {
-            stage: (os.path.basename(find_lesson_audio(lid, stage)) if find_lesson_audio(lid, stage) else None)
-            for stage in STAGES_WITH_AUDIO
-        }
+        lid: {stage: display_audio_name(lid, stage) for stage in STAGES_WITH_AUDIO}
         for lid in lessons.LESSONS.keys()
     }
     lesson_scripts = {
@@ -249,6 +253,8 @@ async def admin_upload_lesson_audio(
     content = await file.read()
     with open(dest_path, "wb") as f:
         f.write(content)
+
+    db.set_audio_original_name(lesson_id, stage, file.filename or f"{lesson_id}_{stage}{ext}")
 
     return RedirectResponse(url=f"/admin?key={key}", status_code=303)
 
