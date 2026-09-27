@@ -56,7 +56,7 @@ def find_lesson_audio(lesson_id: str, stage: str = "training") -> Optional[str]:
     return None
 
 
-STAGES_WITH_AUDIO = ["preview", "review", "training"]
+STAGES_WITH_AUDIO = ["preview", "review"]
 
 
 def check_admin(key: Optional[str]):
@@ -91,7 +91,6 @@ def workbook(request: Request, token: str, lesson: str = lessons.DEFAULT_LESSON_
         stage: (f"/lesson-audio/{lesson}?stage={stage}" if find_lesson_audio(lesson, stage) else None)
         for stage in STAGES_WITH_AUDIO
     }
-    lesson_data["model_audio_url"] = lesson_data["stage_audio"]["training"]
     lesson_data["preview_script"] = db.get_script(lesson, "preview")
     lesson_data["review_script"] = db.get_script(lesson, "review")
 

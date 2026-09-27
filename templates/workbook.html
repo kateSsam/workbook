@@ -100,7 +100,6 @@
 <div class="shell">
   <div class="top">
     <div class="who">수강생 <strong>{{ student_name }}</strong>님</div>
-    <div class="lesson-tag">{{ lesson.tag }}</div>
   </div>
   <h1 class="lesson-title">{{ lesson.title }}</h1>
   <p class="lesson-sub">{{ lesson.subtitle }}</p>
@@ -130,10 +129,8 @@ async function saveState(patch) {
 }
 
 const STAGES = [
-  { key: 'preview',  label: '예습' },
-  { key: 'review',   label: '복습' },
-  { key: 'training', label: '훈련' },
-  { key: 'feedback', label: '훈련피드백' }
+  { key: 'preview', label: '예습' },
+  { key: 'review',  label: '복습' }
 ];
 
 function dividerBars(){
@@ -176,8 +173,6 @@ function renderStage(i){
   const s = STAGES[i];
   if (s.key === 'preview') card.innerHTML = previewHTML();
   else if (s.key === 'review') card.innerHTML = reviewHTML();
-  else if (s.key === 'training') card.innerHTML = trainingHTML();
-  else if (s.key === 'feedback') card.innerHTML = feedbackHTML();
   wireStage(s.key);
 }
 
@@ -251,6 +246,7 @@ function previewHTML(){
     <div class="divider">${dividerBars()}</div>
     ${scriptSectionHTML('preview', LESSON.preview_script)}
     ${audioBlockHTML('preview', LESSON.stage_audio.preview, null)}
+    <p class="lead" style="margin-top:-6px;">이 단계의 녹음은 본인 확인용이에요 (서버에 저장되지 않아요).</p>
     <div class="footer-nav">
       <span></span>
       <button class="btn btn-primary" id="nextFromPreview">복습으로 이동 →</button>
@@ -259,47 +255,17 @@ function previewHTML(){
 }
 
 function reviewHTML(){
-  let html = `<h2>지난 내용 되짚기</h2><p class="lead">간단한 확인 문제로 핵심 개념을 다시 떠올려봐요.</p>`;
-  LESSON.quiz.forEach((item, idx) => {
-    html += `
-      <div class="quiz-q" data-idx="${idx}">
-        <div class="q-text">${idx+1}. ${item.q}</div>
-        <div class="quiz-opts">
-          ${item.opts.map((o, oi) => `<button class="quiz-opt" data-oi="${oi}">${o}</button>`).join('')}
-        </div>
-        <div class="quiz-fb" style="display:none"></div>
-      </div>
-    `;
-  });
-  html += `<div class="divider">${dividerBars()}</div>`;
-  html += scriptSectionHTML('review', LESSON.review_script);
-  html += audioBlockHTML('review', LESSON.stage_audio.review, null);
-  html += `
-    <div class="footer-nav">
-      <button class="btn btn-outline" data-goto="0">← 예습</button>
-      <button class="btn btn-primary" id="nextFromReview">훈련으로 이동 →</button>
+  const cautionItems = (LESSON.review_caution || []).map(c => `<li>${c}</li>`).join('');
+  const caution = cautionItems ? `
+    <div class="note-box" style="margin-top:0;">
+      <strong>🎙️ 녹음 전에 확인해주세요</strong>
+      <ul style="margin:8px 0 0;padding-left:1.2em;">${cautionItems}</ul>
     </div>
-  `;
-  return html;
-}
+    <div class="divider">${dividerBars()}</div>
+  ` : '';
 
-function trainingHTML(){
-  return `
-    <h2>연습 문장</h2>
-    <p class="lead">아래 문장을 모범 음원처럼 또렷하게 따라 읽어보세요.</p>
-    <div class="practice-sentence">${LESSON.practice_sentence}</div>
-    ${audioBlockHTML('training', LESSON.stage_audio.training, LESSON.practice_sentence)}
-    <p class="lead" style="margin-top:-10px;">이 단계의 녹음은 선생님 서버로 저장돼서, 나중에 관리자 페이지에서 확인하실 수 있어요.</p>
-    <div class="footer-nav">
-      <button class="btn btn-outline" data-goto="1">← 복습</button>
-      <button class="btn btn-primary" id="nextFromTraining">훈련피드백으로 이동 →</button>
-    </div>
-  `;
-}
-
-function feedbackHTML(){
   const ratings = state.ratings || {};
-  const rows = LESSON.rate_items.map(item => `
+  const rateRows = LESSON.rate_items.map(item => `
     <div class="rate-row">
       <span class="label">${item.label}</span>
       <div class="rate-scale" data-key="${item.key}">
@@ -307,18 +273,26 @@ function feedbackHTML(){
       </div>
     </div>
   `).join('');
+
   const feedbackBox = TEACHER_FEEDBACK
     ? `<div class="note-box"><strong>선생님 피드백</strong><br>${TEACHER_FEEDBACK}</div>`
     : `<div class="note-box">아직 선생님 피드백이 없어요. 녹음을 제출하면 곧 확인해주실 거예요.</div>`;
+
   return `
+    <h2>복습</h2>
+    ${caution}
+    ${scriptSectionHTML('review', LESSON.review_script)}
+    ${audioBlockHTML('review', LESSON.stage_audio.review, null)}
+    <p class="lead" style="margin-top:-6px;">이 단계의 녹음은 선생님 서버로 저장돼서, 선생님이 확인하실 수 있어요.</p>
+    <div class="divider">${dividerBars()}</div>
     <h2>스스로 평가해보기</h2>
     <p class="lead">방금 녹음한 걸 다시 들으며 1~5점으로 체크해보세요.</p>
-    ${rows}
+    ${rateRows}
     <div class="divider">${dividerBars()}</div>
     ${feedbackBox}
     <div class="footer-nav">
-      <button class="btn btn-outline" data-goto="2">← 훈련</button>
-      <button class="btn btn-primary" id="finishBtn">오늘의 훈련 기록 저장하기</button>
+      <button class="btn btn-outline" data-goto="0">← 예습</button>
+      <button class="btn btn-primary" id="finishBtn">오늘의 학습 기록 저장하기</button>
     </div>
   `;
 }
@@ -466,35 +440,9 @@ function wireStage(key){
   }
 
   if (key === 'review') {
-    document.querySelectorAll('.quiz-q').forEach(qEl => {
-      const idxQ = parseInt(qEl.dataset.idx, 10);
-      const item = LESSON.quiz[idxQ];
-      qEl.querySelectorAll('.quiz-opt').forEach(optBtn => {
-        optBtn.addEventListener('click', () => {
-          const oi = parseInt(optBtn.dataset.oi, 10);
-          qEl.querySelectorAll('.quiz-opt').forEach((b, bi) => {
-            b.disabled = true;
-            if (bi === item.correct) b.classList.add('correct');
-            else if (bi === oi) b.classList.add('wrong');
-          });
-          const fb = qEl.querySelector('.quiz-fb');
-          fb.style.display = 'block';
-          fb.textContent = (oi === item.correct ? '정답이에요. ' : '아쉬워요. ') + item.fb;
-        });
-      });
-    });
     wireBlankGrading('review');
-    wireAudioControls('review', { upload: false });
-    document.getElementById('nextFromReview').addEventListener('click', () => { markDone('review'); renderTracker(); goTo(2); });
-  }
+    wireAudioControls('review', { upload: true });
 
-  if (key === 'training') {
-    wireAudioControls('training', { upload: true });
-    document.getElementById('nextFromTraining').addEventListener('click', () => { markDone('training'); renderTracker(); goTo(3); });
-  }
-
-
-  if (key === 'feedback') {
     document.querySelectorAll('.rate-scale').forEach(scale => {
       const k = scale.dataset.key;
       scale.querySelectorAll('button').forEach(btn => {
@@ -506,9 +454,10 @@ function wireStage(key){
         });
       });
     });
+
     document.getElementById('finishBtn').addEventListener('click', () => {
-      markDone('feedback'); renderTracker();
-      alert('오늘의 훈련 기록이 저장됐어요. 수고하셨습니다!');
+      markDone('review'); renderTracker();
+      alert('오늘의 학습 기록이 저장됐어요. 수고하셨습니다!');
     });
   }
 }

@@ -2,7 +2,6 @@
 
 LESSONS = {
     "lesson1": {
-        "tag": "1차시 · 샘플",
         "title": "또렷하게 자기소개하기",
         "subtitle": "문장 강세와 정확한 모음 발음으로, 첫인사를 또렷하게 전달하는 연습이에요.",
         "preview": {
@@ -17,22 +16,11 @@ LESSONS = {
                 "목을 가볍게 풀었어요 (하품, 어깨 돌리기 등)",
             ],
         },
-        "quiz": [
-            {
-                "q": "문장을 또렷하게 말하기 위한 방법으로 가장 알맞은 것은?",
-                "opts": ["말끝을 점점 작게 흐린다", "문장 끝까지 힘을 유지한다", "최대한 빠르게 말한다"],
-                "correct": 1,
-                "fb": "문장 끝을 흐리면 상대방이 내용을 놓치기 쉬워요. 끝까지 또렷하게!",
-            },
-            {
-                "q": "모음을 정확히 발음하려면?",
-                "opts": ["입을 거의 움직이지 않는다", "입모양을 크고 분명하게 만든다", "자음에만 신경 쓴다"],
-                "correct": 1,
-                "fb": "모음이 흐려지면 단어 전체가 뭉개져 들려요. 입모양이 핵심이에요.",
-            },
+        "review_caution": [
+            "조용한 공간인가요?",
+            "이어폰(또는 마이크)을 착용하셨나요?",
+            "목을 가볍게 풀어주셨나요?",
         ],
-        "practice_sentence": "Hi, my name is ___. It's great to finally meet you today, and I'm really looking forward to our conversation.",
-        "model_audio_url": None,  # 실제 음원 파일 경로가 생기면 여기에 넣으세요 (예: "/static/audio/lesson1.mp3")
         "rate_items": [
             {"key": "clarity", "label": "발음이 또렷했나요?"},
             {"key": "ending", "label": "문장 끝까지 힘있게 말했나요?"},

@@ -51,10 +51,10 @@
   <div class="panel">
     <h3 style="margin:0 0 10px;font-family:'Noto Serif KR',serif;font-size:1.05rem;">차시별 콘텐츠 관리</h3>
     <p class="sub" style="margin-bottom:16px;">여기서 올리고 저장하면 코드 수정이나 재배포 없이 바로 학생 화면에 반영돼요.</p>
-    {% set stage_labels = {'preview': '예습', 'review': '복습', 'training': '훈련'} %}
+    {% set stage_labels = {'preview': '예습', 'review': '복습'} %}
     {% for lid, ldata in lessons.items() %}
       <div style="padding:14px 0;border-top:1px solid var(--line);">
-        <div style="font-weight:700;margin-bottom:10px;">{{ ldata.tag }} — {{ ldata.title }}</div>
+        <div style="font-weight:700;margin-bottom:10px;">{{ ldata.title }}</div>
 
         {% for stage in stages_with_audio %}
           <div style="margin-bottom:14px;">
@@ -93,12 +93,19 @@
     {% endfor %}
   </div>
 
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+    <h2 style="font-family:'Noto Serif KR',serif;font-size:1.15rem;margin:0;">등록된 학생 ({{ students|length }}명)</h2>
+    <input type="text" id="studentSearch" placeholder="🔍 학생 이름 검색" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;min-width:200px;background:var(--paper-raised);color:var(--ink);">
+  </div>
+
   {% if not students %}
     <p class="empty">아직 등록된 학생이 없어요. 위에서 이름을 입력해 첫 학생을 등록해보세요.</p>
   {% endif %}
 
+  <p id="noSearchResult" class="empty" style="display:none;">검색 결과가 없어요.</p>
+
   {% for sv in students %}
-  <div class="student-card">
+  <div class="student-card" data-name="{{ sv.row.name|lower }}">
     <div class="student-head">
       <span class="name">{{ sv.row.name }}</span>
       <form method="post" action="/admin/students/{{ sv.row.id }}/delete" onsubmit="return confirm('{{ sv.row.name }} 학생을 삭제할까요? 기록도 함께 삭제됩니다.')">
@@ -117,8 +124,6 @@
       <div class="stage-pills">
         <span class="pill {{ 'done' if done.get('preview') }}">예습</span>
         <span class="pill {{ 'done' if done.get('review') }}">복습</span>
-        <span class="pill {{ 'done' if done.get('training') }}">훈련</span>
-        <span class="pill {{ 'done' if done.get('feedback') }}">피드백</span>
       </div>
 
       <div class="recordings">
@@ -143,5 +148,23 @@
   </div>
   {% endfor %}
 </div>
+<script>
+  const searchInput = document.getElementById('studentSearch');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      const q = searchInput.value.trim().toLowerCase();
+      const cards = document.querySelectorAll('.student-card');
+      let visibleCount = 0;
+      cards.forEach(card => {
+        const name = card.dataset.name || '';
+        const match = name.includes(q);
+        card.style.display = match ? '' : 'none';
+        if (match) visibleCount++;
+      });
+      const noResult = document.getElementById('noSearchResult');
+      if (noResult) noResult.style.display = (q && visibleCount === 0) ? 'block' : 'none';
+    });
+  }
+</script>
 </body>
 </html>
