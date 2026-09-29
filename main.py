@@ -66,6 +66,11 @@ def check_admin(key: Optional[str]):
 
 # ---------------------------------------------------------------- student ---
 
+@app.api_route("/ping", methods=["GET", "HEAD"])
+def ping():
+    return {"status": "ok"}
+
+
 @app.get("/", response_class=HTMLResponse)
 def home():
     return (
