@@ -41,6 +41,19 @@
   <h1>발음/스피치 훈련 워크북 — 관리자</h1>
   <p class="sub">학생을 등록해서 개별 링크를 발급하고, 진행상황·녹음·피드백을 관리해요.</p>
 
+  <div class="panel" style="background:var(--gold-soft);border-color:var(--gold);">
+    <h3 style="margin:0 0 8px;font-family:'Noto Serif KR',serif;font-size:1rem;">⚠️ 데이터 백업</h3>
+    <p class="sub" style="margin-bottom:14px;">코드를 새로 배포하기 전에는 꼭 백업을 받아두세요. 무료 서버는 재배포할 때 학생 기록이 초기화될 수 있어요.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <a class="btn btn-primary" style="display:inline-block;text-decoration:none;" href="/admin/backup?key={{ key }}">⬇ 전체 데이터 백업 다운로드</a>
+      <form method="post" action="/admin/restore" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center;">
+        <input type="hidden" name="key" value="{{ key }}">
+        <input type="file" name="file" accept=".zip" required>
+        <button type="submit" class="btn-outline">백업에서 복원</button>
+      </form>
+    </div>
+  </div>
+
   <div class="panel">
     <form class="add-form" method="post" action="/admin/students">
       <input type="hidden" name="key" value="{{ key }}">

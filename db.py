@@ -234,6 +234,109 @@ def set_feedback(student_id: int, lesson_id: str, text: str):
     conn.close()
 
 
+# ---------- 백업 / 복원 (Render 무료 요금제의 재배포시 데이터 초기화 대비) ----------
+
+def export_all():
+    conn = get_conn()
+    students = [dict(r) for r in conn.execute("SELECT * FROM students").fetchall()]
+    progress = [
+        dict(r) for r in conn.execute(
+            """
+            SELECT s.token as token, p.lesson_id as lesson_id, p.state_json as state_json, p.updated_at as updated_at
+            FROM progress p JOIN students s ON s.id = p.student_id
+            """
+        ).fetchall()
+    ]
+    feedback = [
+        dict(r) for r in conn.execute(
+            """
+            SELECT s.token as token, f.lesson_id as lesson_id, f.text as text, f.updated_at as updated_at
+            FROM teacher_feedback f JOIN students s ON s.id = f.student_id
+            """
+        ).fetchall()
+    ]
+    recordings = [
+        dict(r) for r in conn.execute(
+            """
+            SELECT s.token as token, r.lesson_id as lesson_id, r.filename as filename, r.uploaded_at as uploaded_at
+            FROM recordings r JOIN students s ON s.id = r.student_id
+            """
+        ).fetchall()
+    ]
+    lesson_scripts = [dict(r) for r in conn.execute("SELECT lesson_id, stage, script_text, updated_at FROM lesson_script").fetchall()]
+    lesson_audio_meta = [dict(r) for r in conn.execute("SELECT lesson_id, stage, original_filename, updated_at FROM lesson_audio_meta").fetchall()]
+    conn.close()
+    return {
+        "students": students,
+        "progress": progress,
+        "feedback": feedback,
+        "recordings": recordings,
+        "lesson_scripts": lesson_scripts,
+        "lesson_audio_meta": lesson_audio_meta,
+    }
+
+
+def restore_student(token: str, name: str, created_at: str):
+    conn = get_conn()
+    conn.execute(
+        "INSERT OR IGNORE INTO students (token, name, created_at) VALUES (?, ?, ?)",
+        (token, name, created_at),
+    )
+    conn.commit()
+    conn.close()
+
+
+def _student_id_by_token(conn, token: str):
+    row = conn.execute("SELECT id FROM students WHERE token = ?", (token,)).fetchone()
+    return row["id"] if row else None
+
+
+def restore_progress_row(token: str, lesson_id: str, state_json: str, updated_at: str):
+    conn = get_conn()
+    sid = _student_id_by_token(conn, token)
+    if sid:
+        conn.execute(
+            """
+            INSERT INTO progress (student_id, lesson_id, state_json, updated_at) VALUES (?, ?, ?, ?)
+            ON CONFLICT(student_id, lesson_id) DO UPDATE SET state_json = excluded.state_json, updated_at = excluded.updated_at
+            """,
+            (sid, lesson_id, state_json, updated_at),
+        )
+        conn.commit()
+    conn.close()
+
+
+def restore_feedback_row(token: str, lesson_id: str, text: str, updated_at: str):
+    conn = get_conn()
+    sid = _student_id_by_token(conn, token)
+    if sid:
+        conn.execute(
+            """
+            INSERT INTO teacher_feedback (student_id, lesson_id, text, updated_at) VALUES (?, ?, ?, ?)
+            ON CONFLICT(student_id, lesson_id) DO UPDATE SET text = excluded.text, updated_at = excluded.updated_at
+            """,
+            (sid, lesson_id, text, updated_at),
+        )
+        conn.commit()
+    conn.close()
+
+
+def restore_recording_row(token: str, lesson_id: str, filename: str, uploaded_at: str):
+    conn = get_conn()
+    sid = _student_id_by_token(conn, token)
+    if sid:
+        exists = conn.execute(
+            "SELECT 1 FROM recordings WHERE student_id = ? AND filename = ?", (sid, filename)
+        ).fetchone()
+        if not exists:
+            conn.execute(
+                "INSERT INTO recordings (student_id, lesson_id, filename, uploaded_at) VALUES (?, ?, ?, ?)",
+                (sid, lesson_id, filename, uploaded_at),
+            )
+            conn.commit()
+    conn.close()
+
+
 # ---------- lesson audio metadata (선생님이 올린 원래 파일명 기억) ----------
 
 def get_audio_original_name(lesson_id: str, stage: str) -> str:

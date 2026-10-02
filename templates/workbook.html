@@ -200,17 +200,25 @@ function writingSectionHTML(stage, answerText){
 function audioBlockHTML(stage, audioUrl, ttsText){
   if (!audioUrl && !ttsText) return '';
   const audioTag = audioUrl ? `<audio id="modelAudioEl" src="${audioUrl}" style="display:none"></audio>` : '';
-  const listenLabel = audioUrl ? '🔊 음원 듣기' : '🔊 음원 듣기 (임시 음성)';
+  const listenLabel = audioUrl ? '🔊 음원 재생' : '🔊 음원 재생 (임시 음성)';
+  const downloadLink = audioUrl
+    ? `<a class="btn btn-outline" href="${audioUrl}" download>⬇ 음원 파일 저장</a>`
+    : '';
   return `
     ${audioTag}
     <div class="row">
       <button class="btn btn-outline" id="playModel">${listenLabel}</button>
+      <button class="btn btn-outline" id="stopModel" disabled>⏸ 음원 멈추기</button>
     </div>
+    ${downloadLink ? `
+    <div class="row">${downloadLink}</div>
+    <p class="lead" style="margin-top:-6px;">화면이 꺼지거나 창을 나가면 재생이 멈출 수 있어요. 파일을 저장해서 평소 쓰는 음악 앱으로 들으면 화면을 꺼도 계속 들을 수 있어요.</p>
+    ` : ''}
     <div class="row">
       <button class="btn btn-record" id="recordBtn">● 내 목소리만 녹음하기</button>
       <span id="recStatus" class="up-status"></span>
     </div>
-    <p class="lead" style="margin-top:-6px;">음원을 먼저 듣고 나서 이 버튼으로 녹음하면, 학생 목소리만 깨끗하게 녹음돼요.</p>
+    <p class="lead" style="margin-top:-6px;">음원을 먼저 듣고 나서 이 버튼으로 녹음하면, 학생 목소리만 깨끗하게 녹음돼요. 녹음 중에는 화면이 꺼지지 않게 켜둔 채로 진행해주세요 (화면이 꺼지면 녹음도 멈춰요).</p>
     <div id="recPlayback"></div>
     <p id="recError" style="color:var(--coral); font-size:0.85rem; display:none;"></p>
     <div class="divider">${dividerBars()}</div>
@@ -293,6 +301,8 @@ function wireAudioControls(stage, { upload }){
   const playModelBtn = document.getElementById('playModel');
   if (!playModelBtn) return; // 이 단계에는 음원/녹음 블록이 없음
 
+  const stopModelBtn = document.getElementById('stopModel');
+
   function playModel(){
     const audioEl = document.getElementById('modelAudioEl');
     if (audioEl) {
@@ -303,13 +313,30 @@ function wireAudioControls(stage, { upload }){
       });
       return;
     }
-    if (stage !== 'training') return;
     if (!('speechSynthesis' in window)) { alert('이 브라우저는 음성 재생을 지원하지 않아요.'); return; }
-    const u = new SpeechSynthesisUtterance(LESSON.practice_sentence);
+    const u = new SpeechSynthesisUtterance(LESSON.practice_sentence || '');
     u.lang = 'ko-KR'; u.rate = 0.92;
     speechSynthesis.cancel(); speechSynthesis.speak(u);
   }
+  function stopModel(){
+    const audioEl = document.getElementById('modelAudioEl');
+    if (audioEl) { audioEl.pause(); audioEl.currentTime = 0; }
+    if ('speechSynthesis' in window) speechSynthesis.cancel();
+  }
   playModelBtn.addEventListener('click', playModel);
+  if (stopModelBtn) {
+    stopModelBtn.addEventListener('click', stopModel);
+    const audioElForState = document.getElementById('modelAudioEl');
+    if (audioElForState) {
+      audioElForState.addEventListener('play', () => { stopModelBtn.disabled = false; });
+      audioElForState.addEventListener('pause', () => { stopModelBtn.disabled = true; });
+      audioElForState.addEventListener('ended', () => { stopModelBtn.disabled = true; });
+    } else {
+      // TTS 모드에서도 멈추기 버튼 활성화
+      playModelBtn.addEventListener('click', () => { stopModelBtn.disabled = false; });
+      stopModelBtn.addEventListener('click', () => { stopModelBtn.disabled = true; });
+    }
+  }
 
   const recordBtn = document.getElementById('recordBtn');
   const playAndRecordBtn = document.getElementById('playAndRecordBtn');
@@ -368,10 +395,10 @@ function wireAudioControls(stage, { upload }){
     if (!recording) return;
     mediaRecorder.stop();
     recording = false;
-    recordBtn.textContent = '● 녹음만 시작';
+    recordBtn.textContent = '● 내 목소리만 녹음하기';
     recordBtn.classList.remove('recording');
     playAndRecordBtn.disabled = false;
-    playAndRecordBtn.textContent = '🎧 들으면서 바로 녹음하기';
+    playAndRecordBtn.textContent = '🎧 음원과 동시에 녹음 (실시간 비교용)';
   }
 
   recordBtn.addEventListener('click', () => { recording ? stopRecording() : startRecording(); });

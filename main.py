@@ -1,12 +1,16 @@
 import glob
+import io
+import json
 import mimetypes
 import os
 import shutil
 import uuid
+import zipfile
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import FastAPI, Request, Form, UploadFile, File, HTTPException, Depends
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
@@ -314,3 +318,64 @@ def admin_get_recording(filename: str, key: Optional[str] = None):
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
     return FileResponse(path)
+
+
+@app.get("/admin/backup")
+def admin_backup(key: Optional[str] = None):
+    check_admin(key)
+    data = db.export_all()
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("backup.json", json.dumps(data, ensure_ascii=False, indent=2))
+        for rec in data["recordings"]:
+            src = os.path.join(UPLOADS_DIR, rec["filename"])
+            if os.path.isfile(src):
+                zf.write(src, arcname=f"recordings/{rec['filename']}")
+        for path in glob.glob(os.path.join(AUDIO_DIR, "*")):
+            zf.write(path, arcname=f"audio/{os.path.basename(path)}")
+    buf.seek(0)
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    headers = {"Content-Disposition": f'attachment; filename="workbook_backup_{stamp}.zip"'}
+    return StreamingResponse(buf, media_type="application/zip", headers=headers)
+
+
+@app.post("/admin/restore")
+async def admin_restore(key: str = Form(...), file: UploadFile = File(...)):
+    check_admin(key)
+    content = await file.read()
+    buf = io.BytesIO(content)
+
+    try:
+        with zipfile.ZipFile(buf) as zf:
+            with zf.open("backup.json") as f:
+                data = json.load(f)
+
+            for s in data.get("students", []):
+                db.restore_student(s["token"], s["name"], s["created_at"])
+            for p in data.get("progress", []):
+                db.restore_progress_row(p["token"], p["lesson_id"], p["state_json"], p["updated_at"])
+            for fb in data.get("feedback", []):
+                db.restore_feedback_row(fb["token"], fb["lesson_id"], fb["text"], fb["updated_at"])
+            for ls in data.get("lesson_scripts", []):
+                db.set_script(ls["lesson_id"], ls["stage"], ls["script_text"])
+            for am in data.get("lesson_audio_meta", []):
+                db.set_audio_original_name(am["lesson_id"], am["stage"], am["original_filename"])
+
+            for name in zf.namelist():
+                if name.startswith("recordings/") and not name.endswith("/"):
+                    dest = os.path.join(UPLOADS_DIR, os.path.basename(name))
+                    with zf.open(name) as src, open(dest, "wb") as out:
+                        out.write(src.read())
+                elif name.startswith("audio/") and not name.endswith("/"):
+                    dest = os.path.join(AUDIO_DIR, os.path.basename(name))
+                    with zf.open(name) as src, open(dest, "wb") as out:
+                        out.write(src.read())
+
+            for rec in data.get("recordings", []):
+                db.restore_recording_row(rec["token"], rec["lesson_id"], rec["filename"], rec["uploaded_at"])
+    except (zipfile.BadZipFile, KeyError, json.JSONDecodeError) as e:
+        raise HTTPException(status_code=400, detail=f"백업 파일을 읽을 수 없어요: {e}")
+
+    return RedirectResponse(url=f"/admin?key={key}", status_code=303)
