@@ -2,7 +2,7 @@
 
 LESSONS = {
     "lesson1": {
-        "title": "또렷하게 자기소개하기",
+        "title": "오늘의 연습",
         "subtitle": "문장 강세와 정확한 모음 발음으로, 첫인사를 또렷하게 전달하는 연습이에요.",
         "preview": {
             "goals": [
