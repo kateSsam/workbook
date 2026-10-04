@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>상담 신청 — Kate English 관리자</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@700&display=swap" rel="stylesheet">
+<style>
+  :root { --paper:#FBF8F3; --paper-raised:#FFFFFF; --ink:#24211D; --ink-soft:#5B564C; --line:#DDD5C7; --teal:#1C5B57; --teal-soft:#E4EFEE; --coral:#D9613F; --gold:#B98B34; --gold-soft:#F6ECD9; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:'Noto Sans KR',sans-serif; line-height:1.6; }
+  .wrap { max-width:920px; margin:0 auto; padding:32px 20px 80px; }
+  h1 { font-family:'Noto Serif KR',serif; font-size:1.5rem; margin:0 0 6px; }
+  .sub { color:var(--ink-soft); margin-bottom:28px; }
+  .panel { background:var(--paper-raised); border:1px solid var(--line); border-radius:14px; padding:22px; margin-bottom:22px; }
+  .add-form { display:flex; gap:10px; flex-wrap:wrap; }
+  .add-form input[type=text] { flex:1; min-width:200px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-family:inherit; }
+  button, .btn { font-family:inherit; font-size:0.88rem; font-weight:700; padding:9px 16px; border-radius:999px; border:1px solid transparent; cursor:pointer; }
+  .btn-primary { background:var(--teal); color:#fff; }
+  .btn-outline { background:transparent; border-color:var(--line); color:var(--ink); }
+  .btn-danger { background:transparent; border-color:var(--coral); color:var(--coral); }
+  .student-card { border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin-bottom:14px; background:var(--paper-raised); }
+  .student-head { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px; }
+  .student-head .name { font-weight:700; font-size:1.05rem; }
+  .link-box { font-size:0.82rem; color:var(--ink-soft); word-break:break-all; }
+  .link-box a { color:var(--teal); }
+  .stage-pills { display:flex; gap:6px; margin:10px 0; }
+  .pill { font-size:0.74rem; padding:3px 9px; border-radius:999px; background:var(--teal-soft); color:var(--ink-soft); }
+  .pill.done { background:var(--teal); color:#fff; }
+  .recordings { margin-top:10px; }
+  .recordings audio { width:100%; margin:4px 0 10px; }
+  .fb-form textarea, textarea { width:100%; min-height:60px; padding:10px; border:1px solid var(--line); border-radius:8px; font-family:inherit; margin-bottom:8px; background:var(--paper-raised); color:var(--ink); }
+  .empty { color:var(--ink-soft); font-size:0.9rem; }
+  .note-box { background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:0.9rem; color:var(--ink); white-space:pre-wrap; }
+  .copy-btn { font-size:0.75rem; padding:3px 9px; }
+  .topnav { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:0 0 22px; }
+  .topnav a { text-decoration:none; font-weight:700; font-size:0.9rem; padding:8px 16px; border-radius:999px; border:1px solid var(--line); color:var(--ink); background:var(--paper-raised); }
+  .topnav a.on { background:var(--teal); color:#fff; border-color:var(--teal); }
+  .topnav .out { margin-left:auto; font-weight:500; color:var(--ink-soft); }
+</style>
+<style>
+  .inq { border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin-bottom:12px; background:var(--paper-raised); }
+  .inq-head { display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+  .inq-name { font-weight:700; font-size:1.05rem; }
+  .inq-time { font-size:0.82rem; color:var(--ink-soft); }
+  .inq dl { display:grid; grid-template-columns:minmax(120px,32%) 1fr; gap:6px 14px; margin:0; font-size:0.92rem; }
+  .inq dt { color:var(--ink-soft); }
+  .inq dd { margin:0; white-space:pre-wrap; word-break:break-word; }
+  .bar { display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+  .count { font-weight:700; }
+  @media (max-width:560px){ .inq dl { grid-template-columns:1fr; } .inq dt { margin-top:6px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="topnav">
+    <a href="/admin" class="{{ 'on' if active_tab == 'students' else '' }}">학생 관리</a>
+    <a href="/admin/inquiries" class="{{ 'on' if active_tab == 'inquiries' else '' }}">상담 신청</a>
+    <a href="/admin/logout" class="out">로그아웃</a>
+  </nav>
+  <h1>상담 신청 내역</h1>
+  <p class="sub">홈페이지 상담 신청서로 들어온 내용이에요. 최신 신청이 맨 위에 있어요.</p>
+
+  {% if data.get('error') == 'setup' %}
+    <div class="panel" style="background:var(--gold-soft);border-color:var(--gold);">
+      아직 연결 설정이 안 되어 있어요. 렌더 Environment 에 <b>INQUIRY_URL</b> 과 <b>INQUIRY_TOKEN</b> 을 넣어 주세요.
+    </div>
+  {% elif data.get('error') %}
+    <div class="panel" style="border-color:var(--coral);color:var(--coral);">{{ data['error'] }}</div>
+  {% else %}
+    <div class="bar">
+      <span class="count">전체 {{ data['count'] }}건</span>
+      <a class="btn btn-outline" style="text-decoration:none" href="/admin/inquiries?refresh=1">새로고침</a>
+    </div>
+    {% if not data['items'] %}
+      <p class="empty">아직 들어온 상담 신청이 없어요.</p>
+    {% endif %}
+    {% for it in data['items'] %}
+      <div class="inq">
+        <div class="inq-head">
+          <span class="inq-name">{{ it.fields[0].value if it.fields else '이름 없음' }}</span>
+          <span class="inq-time">{{ it.time }}</span>
+        </div>
+        <dl>
+          {% for f in it.fields[1:] %}
+            <dt>{{ f.label }}</dt><dd>{{ f.value }}</dd>
+          {% endfor %}
+        </dl>
+      </div>
+    {% endfor %}
+  {% endif %}
+</div>
+</body>
+</html>

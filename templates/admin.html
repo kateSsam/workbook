@@ -2,6 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
+<meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>관리자 — 발음/스피치 훈련 워크북</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -34,10 +35,19 @@
   .empty { color:var(--ink-soft); font-size:0.9rem; }
   .note-box { background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:0.9rem; color:var(--ink); white-space:pre-wrap; }
   .copy-btn { font-size:0.75rem; padding:3px 9px; }
+  .topnav { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:0 0 22px; }
+  .topnav a { text-decoration:none; font-weight:700; font-size:0.9rem; padding:8px 16px; border-radius:999px; border:1px solid var(--line); color:var(--ink); background:var(--paper-raised); }
+  .topnav a.on { background:var(--teal); color:#fff; border-color:var(--teal); }
+  .topnav .out { margin-left:auto; font-weight:500; color:var(--ink-soft); }
 </style>
 </head>
 <body>
 <div class="wrap">
+  <nav class="topnav">
+    <a href="/admin" class="{{ 'on' if active_tab == 'students' else '' }}">학생 관리</a>
+    <a href="/admin/inquiries" class="{{ 'on' if active_tab == 'inquiries' else '' }}">상담 신청</a>
+    <a href="/admin/logout" class="out">로그아웃</a>
+  </nav>
   <h1>발음/스피치 훈련 워크북 — 관리자</h1>
   <p class="sub">학생을 등록해서 개별 링크를 발급하고, 진행상황·녹음·피드백을 관리해요.</p>
 
@@ -45,9 +55,8 @@
     <h3 style="margin:0 0 8px;font-family:'Noto Serif KR',serif;font-size:1rem;">⚠️ 데이터 백업</h3>
     <p class="sub" style="margin-bottom:14px;">코드를 새로 배포하기 전에는 꼭 백업을 받아두세요. 무료 서버는 재배포할 때 학생 기록이 초기화될 수 있어요.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-      <a class="btn btn-primary" style="display:inline-block;text-decoration:none;" href="/admin/backup?key={{ key }}">⬇ 전체 데이터 백업 다운로드</a>
+      <a class="btn btn-primary" style="display:inline-block;text-decoration:none;" href="/admin/backup">⬇ 전체 데이터 백업 다운로드</a>
       <form method="post" action="/admin/restore" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center;">
-        <input type="hidden" name="key" value="{{ key }}">
         <input type="file" name="file" accept=".zip" required>
         <button type="submit" class="btn-outline">백업에서 복원</button>
       </form>
@@ -56,7 +65,6 @@
 
   <div class="panel">
     <form class="add-form" method="post" action="/admin/students">
-      <input type="hidden" name="key" value="{{ key }}">
       <input type="text" name="name" placeholder="새 수강생 이름" required>
       <button type="submit" class="btn-primary">학생 등록하고 링크 발급</button>
     </form>
@@ -82,7 +90,6 @@
               </p>
             {% endif %}
             <form method="post" action="/admin/lesson-audio" enctype="multipart/form-data" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-              <input type="hidden" name="key" value="{{ key }}">
               <input type="hidden" name="lesson_id" value="{{ lid }}">
               <input type="hidden" name="stage" value="{{ stage }}">
               <input type="file" name="file" accept="audio/*" required>
@@ -95,7 +102,6 @@
           <div style="margin-bottom:10px;">
             <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:6px;">{{ stage_labels[stage] }} 정답 스크립트 (학생이 "정답 보기"로 확인할 수 있어요)</div>
             <form method="post" action="/admin/answer-script">
-              <input type="hidden" name="key" value="{{ key }}">
               <input type="hidden" name="lesson_id" value="{{ lid }}">
               <input type="hidden" name="stage" value="{{ stage }}">
               <textarea name="text" placeholder="정답 스크립트를 그대로 입력해주세요." style="min-height:70px;">{{ lesson_answers.get(lid, {}).get(stage, '') }}</textarea>
@@ -123,7 +129,6 @@
     <div class="student-head">
       <span class="name">{{ sv.row.name }}</span>
       <form method="post" action="/admin/students/{{ sv.row.id }}/delete" onsubmit="return confirm('{{ sv.row.name }} 학생을 삭제할까요? 기록도 함께 삭제됩니다.')">
-        <input type="hidden" name="key" value="{{ key }}">
         <button type="submit" class="btn-danger">학생 삭제</button>
       </form>
     </div>
@@ -154,7 +159,7 @@
         {% set recs = sv.recordings | selectattr('lesson_id', 'equalto', lid) | list %}
         {% if recs %}
           {% for r in recs %}
-            <audio controls src="/admin/recording/{{ r.filename }}?key={{ key }}"></audio>
+            <audio controls src="/admin/recording/{{ r.filename }}"></audio>
           {% endfor %}
         {% else %}
           <p class="empty">아직 제출된 녹음이 없어요.</p>
@@ -162,7 +167,6 @@
       </div>
 
       <form class="fb-form" method="post" action="/admin/feedback">
-        <input type="hidden" name="key" value="{{ key }}">
         <input type="hidden" name="student_id" value="{{ sv.row.id }}">
         <input type="hidden" name="lesson_id" value="{{ lid }}">
         <textarea name="text" placeholder="이 학생에게 남길 피드백을 적어주세요">{{ sv.feedback.get(lid, '') }}</textarea>
