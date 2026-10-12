@@ -2,7 +2,7 @@ import sqlite3
 import json
 import os
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta, date
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "data", "workbook.db")
 
@@ -74,8 +74,26 @@ def init_db():
         );
         """
     )
+    # 학생별 시작일(start_date) 컬럼 추가 (기존 DB 호환)
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(students)").fetchall()]
+    if "start_date" not in cols:
+        conn.execute("ALTER TABLE students ADD COLUMN start_date TEXT")
+    conn.execute("UPDATE students SET start_date = ? WHERE start_date IS NULL OR start_date = ''", (kst_today().isoformat(),))
+    # 예전 단일 차시(lesson1) 기록은 Day 1로 옮김
+    for table in ("progress", "recordings", "teacher_feedback", "lesson_script", "lesson_audio_meta"):
+        try:
+            conn.execute(f"UPDATE OR IGNORE {table} SET lesson_id = 'day1' WHERE lesson_id = 'lesson1'")
+        except sqlite3.Error:
+            pass
     conn.commit()
     conn.close()
+
+
+KST = timezone(timedelta(hours=9))
+
+
+def kst_today() -> date:
+    return datetime.now(KST).date()
 
 
 def now_iso():
@@ -84,12 +102,12 @@ def now_iso():
 
 # ---------- students ----------
 
-def create_student(name: str) -> sqlite3.Row:
+def create_student(name: str, start_date: str = None) -> sqlite3.Row:
     token = secrets.token_urlsafe(6)
     conn = get_conn()
     conn.execute(
-        "INSERT INTO students (token, name, created_at) VALUES (?, ?, ?)",
-        (token, name, now_iso()),
+        "INSERT INTO students (token, name, created_at, start_date) VALUES (?, ?, ?, ?)",
+        (token, name, now_iso(), start_date or kst_today().isoformat()),
     )
     conn.commit()
     row = conn.execute("SELECT * FROM students WHERE token = ?", (token,)).fetchone()
@@ -116,6 +134,13 @@ def list_students():
     rows = conn.execute("SELECT * FROM students ORDER BY created_at DESC").fetchall()
     conn.close()
     return rows
+
+
+def set_student_start_date(student_id: int, start_date: str):
+    conn = get_conn()
+    conn.execute("UPDATE students SET start_date = ? WHERE id = ?", (start_date, student_id))
+    conn.commit()
+    conn.close()
 
 
 def delete_student(student_id: int):
@@ -276,11 +301,11 @@ def export_all():
     }
 
 
-def restore_student(token: str, name: str, created_at: str):
+def restore_student(token: str, name: str, created_at: str, start_date: str = None):
     conn = get_conn()
     conn.execute(
-        "INSERT OR IGNORE INTO students (token, name, created_at) VALUES (?, ?, ?)",
-        (token, name, created_at),
+        "INSERT OR IGNORE INTO students (token, name, created_at, start_date) VALUES (?, ?, ?, ?)",
+        (token, name, created_at, start_date or kst_today().isoformat()),
     )
     conn.commit()
     conn.close()

@@ -2,7 +2,6 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>관리자 — 발음/스피치 훈련 워크북</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -35,19 +34,10 @@
   .empty { color:var(--ink-soft); font-size:0.9rem; }
   .note-box { background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:0.9rem; color:var(--ink); white-space:pre-wrap; }
   .copy-btn { font-size:0.75rem; padding:3px 9px; }
-  .topnav { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:0 0 22px; }
-  .topnav a { text-decoration:none; font-weight:700; font-size:0.9rem; padding:8px 16px; border-radius:999px; border:1px solid var(--line); color:var(--ink); background:var(--paper-raised); }
-  .topnav a.on { background:var(--teal); color:#fff; border-color:var(--teal); }
-  .topnav .out { margin-left:auto; font-weight:500; color:var(--ink-soft); }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <nav class="topnav">
-    <a href="/admin" class="{{ 'on' if active_tab == 'students' else '' }}">학생 관리</a>
-    <a href="/admin/inquiries" class="{{ 'on' if active_tab == 'inquiries' else '' }}">상담 신청</a>
-    <a href="/admin/logout" class="out">로그아웃</a>
-  </nav>
   <h1>발음/스피치 훈련 워크북 — 관리자</h1>
   <p class="sub">학생을 등록해서 개별 링크를 발급하고, 진행상황·녹음·피드백을 관리해요.</p>
 
@@ -55,8 +45,9 @@
     <h3 style="margin:0 0 8px;font-family:'Noto Serif KR',serif;font-size:1rem;">⚠️ 데이터 백업</h3>
     <p class="sub" style="margin-bottom:14px;">코드를 새로 배포하기 전에는 꼭 백업을 받아두세요. 무료 서버는 재배포할 때 학생 기록이 초기화될 수 있어요.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-      <a class="btn btn-primary" style="display:inline-block;text-decoration:none;" href="/admin/backup">⬇ 전체 데이터 백업 다운로드</a>
+      <a class="btn btn-primary" style="display:inline-block;text-decoration:none;" href="/admin/backup?key={{ key }}">⬇ 전체 데이터 백업 다운로드</a>
       <form method="post" action="/admin/restore" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center;">
+        <input type="hidden" name="key" value="{{ key }}">
         <input type="file" name="file" accept=".zip" required>
         <button type="submit" class="btn-outline">백업에서 복원</button>
       </form>
@@ -65,50 +56,59 @@
 
   <div class="panel">
     <form class="add-form" method="post" action="/admin/students">
+      <input type="hidden" name="key" value="{{ key }}">
       <input type="text" name="name" placeholder="새 수강생 이름" required>
+      <label style="font-size:0.85rem;color:var(--ink-soft);display:flex;align-items:center;gap:6px;">시작일(Day 1)
+        <input type="date" name="start_date" value="{{ today }}" style="padding:9px;border:1px solid var(--line);border-radius:8px;font-family:inherit;">
+      </label>
       <button type="submit" class="btn-primary">학생 등록하고 링크 발급</button>
     </form>
   </div>
 
+  {% set stage_labels = {'preview': '예습', 'review': '복습'} %}
   <div class="panel">
-    <h3 style="margin:0 0 10px;font-family:'Noto Serif KR',serif;font-size:1.05rem;">차시별 콘텐츠 관리</h3>
-    <p class="sub" style="margin-bottom:16px;">여기서 올리고 저장하면 코드 수정이나 재배포 없이 바로 학생 화면에 반영돼요.</p>
-    {% set stage_labels = {'preview': '예습', 'review': '복습'} %}
-    {% for lid, ldata in lessons.items() %}
-      <div style="padding:14px 0;border-top:1px solid var(--line);">
-        <div style="font-weight:700;margin-bottom:10px;">{{ ldata.title }}</div>
-
-        {% for stage in stages_with_audio %}
-          <div style="margin-bottom:14px;">
-            <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:6px;">{{ stage_labels[stage] }} 음원</div>
-            {% if lesson_audio_info.get(lid, {}).get(stage) %}
-              <audio controls src="/lesson-audio/{{ lid }}?stage={{ stage }}" style="width:100%;margin-bottom:6px;"></audio>
-              <div class="empty" style="margin-bottom:6px;">현재 파일: {{ lesson_audio_info[lid][stage] }}</div>
-            {% else %}
-              <p class="empty" style="margin-bottom:6px;">
-                {% if stage == 'training' %}아직 업로드된 음원이 없어요. 지금은 임시 음성(TTS)으로 재생돼요.{% else %}아직 업로드된 음원이 없어요. 없으면 이 단계에는 음원 버튼이 안 보여요.{% endif %}
-              </p>
-            {% endif %}
-            <form method="post" action="/admin/lesson-audio" enctype="multipart/form-data" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-              <input type="hidden" name="lesson_id" value="{{ lid }}">
-              <input type="hidden" name="stage" value="{{ stage }}">
-              <input type="file" name="file" accept="audio/*" required>
-              <button type="submit" class="btn-outline">{{ '교체 업로드' if lesson_audio_info.get(lid, {}).get(stage) else '음원 업로드' }}</button>
-            </form>
-          </div>
+    <h3 style="margin:0 0 10px;font-family:'Noto Serif KR',serif;font-size:1.05rem;">날짜(Day)별 콘텐츠 관리</h3>
+    <p class="sub" style="margin-bottom:14px;">학생마다 시작일부터 Day 1, 2, 3...이 매일 아침(한국시간 0시) 자동으로 열려요. 아래에서 Day를 고르고 음원과 정답을 미리 올려두세요. 아직 안 열린 Day의 음원은 학생이 접근할 수 없어요.</p>
+    <form method="get" action="/admin" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+      <input type="hidden" name="key" value="{{ key }}">
+      <select name="day" onchange="this.form.submit()" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper-raised);color:var(--ink);">
+        {% for n in range(1, max_days + 1) %}
+        <option value="{{ n }}" {% if n == sel_day %}selected{% endif %}>Day {{ n }}{% if day_ready[n] %} ✓ 음원 있음{% endif %}</option>
         {% endfor %}
+      </select>
+      <noscript><button type="submit" class="btn-outline">이동</button></noscript>
+    </form>
+    <div style="font-weight:700;margin-bottom:10px;">Day {{ sel_day }}</div>
 
-        {% for stage in ['preview', 'review'] %}
-          <div style="margin-bottom:10px;">
-            <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:6px;">{{ stage_labels[stage] }} 정답 스크립트 (학생이 "정답 보기"로 확인할 수 있어요)</div>
-            <form method="post" action="/admin/answer-script">
-              <input type="hidden" name="lesson_id" value="{{ lid }}">
-              <input type="hidden" name="stage" value="{{ stage }}">
-              <textarea name="text" placeholder="정답 스크립트를 그대로 입력해주세요." style="min-height:70px;">{{ lesson_answers.get(lid, {}).get(stage, '') }}</textarea>
-              <button type="submit" class="btn-outline" style="margin-top:6px;">정답 스크립트 저장</button>
-            </form>
-          </div>
-        {% endfor %}
+    {% for stage in stages_with_audio %}
+      <div style="margin-bottom:14px;">
+        <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:6px;">{{ stage_labels[stage] }} 음원</div>
+        {% if audio_info.get(stage) %}
+          <audio controls src="/lesson-audio/{{ lid }}?stage={{ stage }}&key={{ key }}" style="width:100%;margin-bottom:6px;"></audio>
+          <div class="empty" style="margin-bottom:6px;">현재 파일: {{ audio_info[stage] }} (학생이 저장할 때도 이 이름이에요)</div>
+        {% else %}
+          <p class="empty" style="margin-bottom:6px;">아직 업로드된 음원이 없어요. 없으면 학생 화면에 "준비 중"으로 보여요.</p>
+        {% endif %}
+        <form method="post" action="/admin/lesson-audio" enctype="multipart/form-data" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <input type="hidden" name="key" value="{{ key }}">
+          <input type="hidden" name="lesson_id" value="{{ lid }}">
+          <input type="hidden" name="stage" value="{{ stage }}">
+          <input type="file" name="file" accept="audio/*" required>
+          <button type="submit" class="btn-outline">{{ '교체 업로드' if audio_info.get(stage) else '음원 업로드' }}</button>
+        </form>
+      </div>
+    {% endfor %}
+
+    {% for stage in ['preview', 'review'] %}
+      <div style="margin-bottom:10px;">
+        <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:6px;">{{ stage_labels[stage] }} 정답 스크립트 (학생이 "정답 보기"로 확인해요)</div>
+        <form method="post" action="/admin/answer-script">
+          <input type="hidden" name="key" value="{{ key }}">
+          <input type="hidden" name="lesson_id" value="{{ lid }}">
+          <input type="hidden" name="stage" value="{{ stage }}">
+          <textarea name="text" placeholder="정답 스크립트를 그대로 입력해주세요." style="min-height:70px;">{{ answers.get(stage, '') }}</textarea>
+          <button type="submit" class="btn-outline" style="margin-top:6px;">정답 스크립트 저장</button>
+        </form>
       </div>
     {% endfor %}
   </div>
@@ -129,6 +129,7 @@
     <div class="student-head">
       <span class="name">{{ sv.row.name }}</span>
       <form method="post" action="/admin/students/{{ sv.row.id }}/delete" onsubmit="return confirm('{{ sv.row.name }} 학생을 삭제할까요? 기록도 함께 삭제됩니다.')">
+        <input type="hidden" name="key" value="{{ key }}">
         <button type="submit" class="btn-danger">학생 삭제</button>
       </form>
     </div>
@@ -137,42 +138,51 @@
       <button class="btn-outline copy-btn" onclick="navigator.clipboard.writeText(location.origin + '{{ sv.link }}'); this.textContent='복사됨';">복사</button>
     </div>
 
-    {% for lid, ldata in lessons.items() %}
-      {% set st = sv.progress.get(lid, {}).get('state', {}) %}
-      {% set done = st.get('done', {}) %}
-      <div class="stage-pills">
-        <span class="pill {{ 'done' if done.get('preview') }}">예습</span>
-        <span class="pill {{ 'done' if done.get('review') }}">복습</span>
-      </div>
+    <form method="post" action="/admin/students/{{ sv.row.id }}/start-date" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0;font-size:0.85rem;color:var(--ink-soft);">
+      <input type="hidden" name="key" value="{{ key }}">
+      <input type="hidden" name="day" value="{{ sel_day }}">
+      시작일
+      <input type="date" name="start_date" value="{{ sv.row.start_date }}" style="padding:6px;border:1px solid var(--line);border-radius:8px;font-family:inherit;">
+      <button type="submit" class="btn-outline copy-btn">변경</button>
+      <span>· 오늘은 {% if sv.today_day >= 1 %}<strong>Day {{ sv.today_day }}</strong>{% else %}시작 전{% endif %}</span>
+    </form>
+    <div class="empty" style="margin-bottom:6px;">녹음을 제출한 Day: {% if sv.rec_days %}{% for n in sv.rec_days %}Day {{ n }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}없음{% endif %}</div>
 
-      {% set my_script = st.get('myScript', {}) %}
-      {% for stage in ['preview', 'review'] %}
-        {% if my_script.get(stage) %}
-          <div style="margin-bottom:10px;">
-            <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:4px;">{{ stage_labels[stage] }} 때 학생이 적은 내용</div>
-            <div class="note-box" style="margin-top:0;">{{ my_script.get(stage) }}</div>
-          </div>
-        {% endif %}
-      {% endfor %}
+    <div style="font-weight:700;margin:12px 0 4px;">Day {{ sel_day }}</div>
+    {% set st = sv.state %}
+    {% set done = st.get('done', {}) %}
+    <div class="stage-pills">
+      <span class="pill {{ 'done' if done.get('preview') }}">예습</span>
+      <span class="pill {{ 'done' if done.get('review') }}">복습</span>
+    </div>
 
-      <div class="recordings">
-        {% set recs = sv.recordings | selectattr('lesson_id', 'equalto', lid) | list %}
-        {% if recs %}
-          {% for r in recs %}
-            <audio controls src="/admin/recording/{{ r.filename }}"></audio>
-          {% endfor %}
-        {% else %}
-          <p class="empty">아직 제출된 녹음이 없어요.</p>
-        {% endif %}
-      </div>
-
-      <form class="fb-form" method="post" action="/admin/feedback">
-        <input type="hidden" name="student_id" value="{{ sv.row.id }}">
-        <input type="hidden" name="lesson_id" value="{{ lid }}">
-        <textarea name="text" placeholder="이 학생에게 남길 피드백을 적어주세요">{{ sv.feedback.get(lid, '') }}</textarea>
-        <button type="submit" class="btn-primary">피드백 저장</button>
-      </form>
+    {% set my_script = st.get('myScript', {}) %}
+    {% for stage in ['preview', 'review'] %}
+      {% if my_script.get(stage) %}
+        <div style="margin-bottom:10px;">
+          <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:4px;">{{ stage_labels[stage] }} 때 학생이 적은 내용</div>
+          <div class="note-box" style="margin-top:0;">{{ my_script.get(stage) }}</div>
+        </div>
+      {% endif %}
     {% endfor %}
+
+    <div class="recordings">
+      {% if sv.recordings %}
+        {% for r in sv.recordings %}
+          <audio controls src="/admin/recording/{{ r.filename }}?key={{ key }}"></audio>
+        {% endfor %}
+      {% else %}
+        <p class="empty">이 Day에 제출된 녹음이 없어요.</p>
+      {% endif %}
+    </div>
+
+    <form class="fb-form" method="post" action="/admin/feedback">
+      <input type="hidden" name="key" value="{{ key }}">
+      <input type="hidden" name="student_id" value="{{ sv.row.id }}">
+      <input type="hidden" name="lesson_id" value="{{ lid }}">
+      <textarea name="text" placeholder="이 학생에게 남길 피드백을 적어주세요">{{ sv.feedback }}</textarea>
+      <button type="submit" class="btn-primary">피드백 저장</button>
+    </form>
   </div>
   {% endfor %}
 </div>
