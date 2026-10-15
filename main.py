@@ -142,8 +142,8 @@ def group_of(name: str) -> str:
 
 
 def plan_files(plan: dict, slot: int) -> List[str]:
-    """그날 연습할 음원. 하루에 하나만 연습하므로 첫 번째 음원만 사용."""
-    return [f for f in plan.get(slot, []) if audio_path(f)][:1]
+    """그날 연습할 음원 (보통 하나, 필요하면 최대 둘)."""
+    return [f for f in plan.get(slot, []) if audio_path(f)][:2]
 
 
 def script_for(filename: str) -> str:
@@ -503,6 +503,7 @@ def _plan_page_data(student):
                 "n": n,
                 "label": day_label(start, n),
                 "a": files[0] if len(files) > 0 else "",
+                "b": files[1] if len(files) > 1 else "",
             })
         weeks.append({"no": w + 1, "slots": slots, "filled": any(s["a"] for s in slots)})
     return weeks
@@ -540,9 +541,13 @@ async def admin_plan_save(request: Request, student_id: int):
     form = await request.form()
     plan = {}
     for n in range(1, lessons.MAX_DAYS + 1):
-        v = safe_audio_name(str(form.get(f"s{n}_a", "")))
-        if v:
-            plan[n] = [v]
+        files = []
+        for part in ("a", "b"):
+            v = safe_audio_name(str(form.get(f"s{n}_{part}", "")))
+            if v and v not in files:
+                files.append(v)
+        if files:
+            plan[n] = files
     db.set_plan(student_id, plan)
     return RedirectResponse(url=f"/admin/students/{student_id}/plan?saved=1", status_code=303)
 

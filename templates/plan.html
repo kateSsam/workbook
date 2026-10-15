@@ -41,10 +41,10 @@
   .week { border:1px solid var(--line); border-radius:12px; margin-bottom:12px; background:var(--paper-raised); }
   .week > summary { cursor:pointer; padding:12px 16px; font-weight:700; list-style:none; }
   .week .body { padding:4px 16px 14px; }
-  .slot { display:grid; grid-template-columns:130px 1fr; gap:8px; align-items:center; margin-bottom:8px; }
+  .slot { display:grid; grid-template-columns:120px 1fr 1fr; gap:8px; align-items:center; margin-bottom:8px; }
   .slot .lab { font-size:0.85rem; color:var(--ink-soft); }
   .slot select, .quick select { padding:8px; border:1px solid var(--line); border-radius:8px; font-family:inherit; background:var(--paper-raised); color:var(--ink); min-width:0; width:100%; }
-  .quick { display:grid; grid-template-columns:1fr auto; gap:8px; align-items:center; background:var(--gold-soft); border-radius:10px; padding:10px; margin:8px 0 12px; }
+  .quick { display:grid; grid-template-columns:1.2fr 1.6fr 0.7fr 0.7fr auto; gap:8px; align-items:center; background:var(--gold-soft); border-radius:10px; padding:10px; margin:8px 0 12px; }
   @media (max-width:640px){ .slot { grid-template-columns:1fr; } .quick { grid-template-columns:1fr; } }
 </style>
 </head>
@@ -53,7 +53,7 @@
   {% include "_nav.html" %}
   <p><a href="/admin" style="color:var(--teal);">← 학생 관리로</a></p>
   <h1>{{ student.name }} 학생 진도표</h1>
-  <p class="sub">월~금 수업일마다 연습할 음원을 <strong>하나씩</strong> 정해요. 주말은 쉬어요. 시작일은 <strong>{{ student.start_date }}</strong>이고, {% if today_day >= 1 %}오늘까지 Day {{ today_day }}가 열렸어요.{% else %}아직 시작 전이에요.{% endif %} 시작일을 월요일로 맞추면 한 주가 월~금에 딱 맞아요.</p>
+  <p class="sub">월~금 수업일마다 연습할 음원을 정해요. 보통 하루 <strong>하나</strong>, 오른쪽 칸은 두 개를 같이 할 날에만 써요. 주말은 쉬어요. 시작일은 <strong>{{ student.start_date }}</strong>이고, {% if today_day >= 1 %}오늘까지 Day {{ today_day }}가 열렸어요.{% else %}아직 시작 전이에요.{% endif %} 시작일을 월요일로 맞추면 한 주가 월~금에 딱 맞아요.</p>
   {% if saved %}<div class="panel" style="background:var(--teal-soft);border-color:var(--teal);padding:12px 18px;">저장됐어요 ✓</div>{% endif %}
   {% if not library %}<div class="panel">보관함에 음원이 없어요. 먼저 <a href="/admin/library">음원 보관함</a>에 음원을 올려주세요.</div>{% endif %}
 
@@ -75,8 +75,16 @@
       <summary>{{ w.no }}주차 ({{ w.slots[0].label }} ~ {{ w.slots[4].label }}){% if w.filled %} ✓{% endif %}</summary>
       <div class="body">
         <div class="quick">
+          <select class="qmode">
+            <option value="seq">순서대로 (월~금 각각 다음 음원)</option>
+            <option value="pat">1/2/1/2/1+2 패턴 (금요일엔 둘 다)</option>
+          </select>
           <select class="qa"><option value="">시작 음원 선택</option>{% for g in library_groups %}<optgroup label="{{ g.name }}">{% for f in g.files %}<option value="{{ f }}">{{ f }}</option>{% endfor %}</optgroup>{% endfor %}</select>
-          <button type="button" class="btn-outline fill-seq">여기부터 5개 순서대로 채우기</button>
+          <select class="qweeks" title="몇 주를 채울까요">
+            <option value="1">1주</option><option value="2">2주</option><option value="3">3주</option><option value="4">4주</option>
+          </select>
+          <span class="lab" style="font-size:0.78rem;color:var(--ink-soft);">이 주부터</span>
+          <button type="button" class="btn-outline fill-seq">채우기</button>
         </div>
         {% for s in w.slots %}
         <div class="slot">
@@ -85,6 +93,11 @@
             <option value="">(음원 없음)</option>
             {% for g in library_groups %}<optgroup label="{{ g.name }}">{% for f in g.files %}<option value="{{ f }}" {% if f == s.a %}selected{% endif %}>{{ f }}</option>{% endfor %}</optgroup>{% endfor %}
             {% if s.a and s.a not in library %}<option value="{{ s.a }}" selected>{{ s.a }} (보관함에 없음)</option>{% endif %}
+          </select>
+          <select name="s{{ s.n }}_b" data-slot="{{ s.n }}" data-part="b">
+            <option value="">(함께 할 음원 없음)</option>
+            {% for g in library_groups %}<optgroup label="{{ g.name }}">{% for f in g.files %}<option value="{{ f }}" {% if f == s.b %}selected{% endif %}>{{ f }}</option>{% endfor %}</optgroup>{% endfor %}
+            {% if s.b and s.b not in library %}<option value="{{ s.b }}" selected>{{ s.b }} (보관함에 없음)</option>{% endif %}
           </select>
         </div>
         {% endfor %}
@@ -99,23 +112,40 @@
 </div>
 <script>
   const LIB = {{ library_groups|map(attribute='files')|sum(start=[])|tojson }};
-  function slotSel(n){ return document.querySelector(`select[data-slot="${n}"]`); }
+  function sel(n, part){ return document.querySelector(`select[data-slot="${n}"][data-part="${part}"]`); }
+  function setSlot(n, a, b){
+    const sa = sel(n, 'a'), sb = sel(n, 'b');
+    if (sa) sa.value = a || '';
+    if (sb) sb.value = b || '';
+  }
   document.querySelectorAll('.week').forEach(week => {
     const w = parseInt(week.dataset.week, 10);
-    const base = (w - 1) * 5;
     const fill = week.querySelector('.fill-seq');
     if (fill) fill.addEventListener('click', () => {
-      const start = week.querySelector('.qa').value;
-      const idx = LIB.indexOf(start);
-      if (idx < 0) { alert('시작할 음원을 먼저 골라주세요.'); return; }
-      for (let i = 0; i < 5; i++) {
-        const s = slotSel(base + i + 1);
-        if (s) s.value = (idx + i < LIB.length) ? LIB[idx + i] : '';
+      const start = LIB.indexOf(week.querySelector('.qa').value);
+      if (start < 0) { alert('시작할 음원을 먼저 골라주세요.'); return; }
+      const mode = week.querySelector('.qmode').value;
+      const weeks = parseInt(week.querySelector('.qweeks').value, 10) || 1;
+      const get = i => (i >= 0 && i < LIB.length) ? LIB[i] : '';
+      let missing = false;
+      for (let k = 0; k < weeks; k++) {
+        const base = (w - 1 + k) * 5;
+        if (!sel(base + 1, 'a')) break;          // 마지막 주를 넘어가면 멈춤
+        if (mode === 'seq') {
+          for (let i = 0; i < 5; i++) { const f = get(start + 5 * k + i); if (!f) missing = true; setSlot(base + i + 1, f, ''); }
+        } else {
+          const x = get(start + 2 * k), y = get(start + 2 * k + 1);
+          if (!x || !y) missing = true;
+          setSlot(base + 1, x, ''); setSlot(base + 2, y, ''); setSlot(base + 3, x, '');
+          setSlot(base + 4, y, ''); setSlot(base + 5, x, y);
+        }
       }
+      if (missing) alert('보관함에 음원이 모자라서 일부 칸은 비워뒀어요.');
     });
     const cp = week.querySelector('.copy-prev');
     if (cp) cp.addEventListener('click', () => {
-      for (let i = 1; i <= 5; i++) { const prev = slotSel(base - 5 + i), cur = slotSel(base + i); if (prev && cur) cur.value = prev.value; }
+      const base = (w - 1) * 5;
+      for (let i = 1; i <= 5; i++) setSlot(base + i, sel(base - 5 + i, 'a').value, sel(base - 5 + i, 'b').value);
     });
   });
 </script>
