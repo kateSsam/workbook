@@ -75,7 +75,7 @@
       <summary>{{ w.no }}주차 ({{ w.slots[0].label }} ~ {{ w.slots[4].label }}){% if w.filled %} ✓{% endif %}</summary>
       <div class="body">
         <div class="quick">
-          <select class="qa"><option value="">시작 음원 선택</option>{% for f in library %}<option value="{{ f }}">{{ f }}</option>{% endfor %}</select>
+          <select class="qa"><option value="">시작 음원 선택</option>{% for g in library_groups %}<optgroup label="{{ g.name }}">{% for f in g.files %}<option value="{{ f }}">{{ f }}</option>{% endfor %}</optgroup>{% endfor %}</select>
           <button type="button" class="btn-outline fill-seq">여기부터 5개 순서대로 채우기</button>
         </div>
         {% for s in w.slots %}
@@ -83,7 +83,7 @@
           <span class="lab">Day {{ s.n }} · {{ s.label }}</span>
           <select name="s{{ s.n }}_a" data-slot="{{ s.n }}" data-part="a">
             <option value="">(음원 없음)</option>
-            {% for f in library %}<option value="{{ f }}" {% if f == s.a %}selected{% endif %}>{{ f }}</option>{% endfor %}
+            {% for g in library_groups %}<optgroup label="{{ g.name }}">{% for f in g.files %}<option value="{{ f }}" {% if f == s.a %}selected{% endif %}>{{ f }}</option>{% endfor %}</optgroup>{% endfor %}
             {% if s.a and s.a not in library %}<option value="{{ s.a }}" selected>{{ s.a }} (보관함에 없음)</option>{% endif %}
           </select>
         </div>
@@ -98,7 +98,7 @@
   </form>
 </div>
 <script>
-  const LIB = {{ library|tojson }};
+  const LIB = {{ library_groups|map(attribute='files')|sum(start=[])|tojson }};
   function slotSel(n){ return document.querySelector(`select[data-slot="${n}"]`); }
   document.querySelectorAll('.week').forEach(week => {
     const w = parseInt(week.dataset.week, 10);

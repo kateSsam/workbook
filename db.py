@@ -479,3 +479,20 @@ def restore_plan_row(token: str, slot: int, audios_json: str):
         )
         conn.commit()
     conn.close()
+
+
+def rename_audio_refs(old: str, new: str):
+    """음원 이름을 바꿀 때, 정답 스크립트와 학생 진도표에 적힌 이름도 같이 바꿔줌."""
+    conn = get_conn()
+    conn.execute("UPDATE OR REPLACE lesson_script SET lesson_id = ? WHERE lesson_id = ?", ("audio:" + new, "audio:" + old))
+    rows = conn.execute("SELECT id, audios_json FROM plan_slots").fetchall()
+    for r in rows:
+        try:
+            files = json.loads(r["audios_json"])
+        except (TypeError, ValueError):
+            continue
+        if old in files:
+            files = [new if f == old else f for f in files]
+            conn.execute("UPDATE plan_slots SET audios_json = ? WHERE id = ?", (json.dumps(files, ensure_ascii=False), r["id"]))
+    conn.commit()
+    conn.close()

@@ -136,6 +136,11 @@ def list_library() -> List[str]:
     return sorted(names, key=natural)
 
 
+def group_of(name: str) -> str:
+    """'교재A - 1과.mp3' -> '교재A'. 묶음 표시가 없으면 빈 문자열."""
+    return name.split(" - ", 1)[0].strip() if " - " in name else ""
+
+
 def plan_files(plan: dict, slot: int) -> List[str]:
     """그날 연습할 음원. 하루에 하나만 연습하므로 첫 번째 음원만 사용."""
     return [f for f in plan.get(slot, []) if audio_path(f)][:1]
@@ -405,27 +410,53 @@ def _admin_redirect(key: str = None, lesson_id: str = None):
 def admin_library(request: Request):
     if not is_admin(request):
         return RedirectResponse(url="/admin", status_code=303)
-    files = []
+    groups = {}
     for f in list_library():
-        files.append({
+        g = group_of(f)
+        groups.setdefault(g, []).append({
             "name": f,
+            "short": f.split(" - ", 1)[1] if g else f,
             "url": "/audio/" + urllib.parse.quote(f),
             "size_mb": round(os.path.getsize(os.path.join(AUDIO_DIR, f)) / 1048576, 1),
             "answer": script_for(f),
         })
-    return templates.TemplateResponse("library.html", {"request": request, "active_tab": "library", "files": files})
+    ordered = [{"name": g or "묶음 없음", "files": groups[g]} for g in sorted(groups, key=lambda x: (x == "", x.lower()))]
+    existing_groups = [g for g in groups if g]
+    return templates.TemplateResponse(
+        "library.html",
+        {"request": request, "active_tab": "library", "groups": ordered, "total": sum(len(v) for v in groups.values()), "existing_groups": existing_groups},
+    )
 
 
 @app.post("/admin/library/upload")
-async def admin_library_upload(request: Request, files: List[UploadFile] = File(...)):
+async def admin_library_upload(request: Request, files: List[UploadFile] = File(...), group: str = Form("")):
     check_admin(request, None)
+    group = safe_audio_name(group).replace(" - ", "-")
     for up in files:
         name = safe_audio_name(up.filename or "")
         if not name or os.path.splitext(name)[1].lower() not in AUDIO_EXTS:
             continue
+        if group and not name.startswith(group + " - "):
+            name = f"{group} - {name}"
         content = await up.read()
         with open(os.path.join(AUDIO_DIR, name), "wb") as out:
             out.write(content)
+    return RedirectResponse(url="/admin/library", status_code=303)
+
+
+@app.post("/admin/library/rename")
+def admin_library_rename(request: Request, filename: str = Form(...), new_name: str = Form(...)):
+    check_admin(request, None)
+    old = audio_path(filename)
+    base_old = safe_audio_name(filename)
+    new = safe_audio_name(new_name)
+    ext = os.path.splitext(base_old)[1]
+    if new and os.path.splitext(new)[1].lower() not in AUDIO_EXTS:
+        new += ext
+    if not old or not new or os.path.exists(os.path.join(AUDIO_DIR, new)):
+        raise HTTPException(status_code=400, detail="이름을 바꿀 수 없어요. 같은 이름의 음원이 이미 있는지 확인해주세요.")
+    os.rename(old, os.path.join(AUDIO_DIR, new))
+    db.rename_audio_refs(base_old, new)
     return RedirectResponse(url="/admin/library", status_code=303)
 
 
@@ -451,6 +482,13 @@ def admin_library_script(request: Request, filename: str = Form(...), text: str 
 
 
 # ------------------------------------------------------------ 학생별 진도표 ---
+
+def _library_groups():
+    groups = {}
+    for f in list_library():
+        groups.setdefault(group_of(f), []).append(f)
+    return [{"name": g or "묶음 없음", "files": groups[g]} for g in sorted(groups, key=lambda x: (x == "", x.lower()))]
+
 
 def _plan_page_data(student):
     start = student_start(student)
@@ -486,6 +524,7 @@ def admin_plan(request: Request, student_id: int, saved: int = 0):
             "student": student,
             "weeks": _plan_page_data(student),
             "library": list_library(),
+            "library_groups": _library_groups(),
             "others": others,
             "today_day": student_day(student),
             "saved": bool(saved),

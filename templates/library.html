@@ -49,43 +49,77 @@
   <div class="panel">
     <h3 style="margin:0 0 8px;font-family:'Noto Serif KR',serif;font-size:1rem;">음원 올리기</h3>
     <form method="post" action="/admin/library/upload" enctype="multipart/form-data" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <input type="text" name="group" list="groupList" placeholder="묶음 이름 (예: I can talk 1) — 비워도 돼요" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;min-width:260px;background:var(--paper-raised);color:var(--ink);">
+      <datalist id="groupList">{% for g in existing_groups %}<option value="{{ g }}">{% endfor %}</datalist>
       <input type="file" name="files" accept="audio/*" multiple required>
       <button type="submit" class="btn-primary">올리기</button>
     </form>
-    <p class="empty" style="margin:10px 0 0;">여러 개를 한꺼번에 선택해서 올릴 수 있어요. 같은 이름으로 다시 올리면 교체돼요. GitHub의 <strong>seed_audio</strong> 폴더에 넣고 배포해도 여기에 자동으로 나타나요(서버가 초기화돼도 남아요).</p>
+    <p class="empty" style="margin:10px 0 0;">묶음 이름을 적으면 그 이름으로 음원이 정리돼요(교재·단원별로 묶어두면 편해요). 여러 개를 한꺼번에 선택해서 올릴 수 있고, 같은 이름으로 다시 올리면 교체돼요. GitHub의 <strong>seed_audio</strong> 폴더 안 하위 폴더 이름도 묶음 이름이 돼요.</p>
   </div>
 
-  <h2 style="font-family:'Noto Serif KR',serif;font-size:1.15rem;margin:0 0 12px;">보관 중인 음원 ({{ files|length }}개)</h2>
-  {% if not files %}<p class="empty">아직 음원이 없어요.</p>{% endif %}
-  <input type="text" id="libSearch" placeholder="🔍 음원 이름 검색" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;min-width:220px;margin-bottom:12px;background:var(--paper-raised);color:var(--ink);">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+    <h2 style="font-family:'Noto Serif KR',serif;font-size:1.15rem;margin:0;">보관 중인 음원 ({{ total }}개)</h2>
+    <input type="text" id="libSearch" placeholder="🔍 음원 이름 검색" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;min-width:220px;background:var(--paper-raised);color:var(--ink);">
+  </div>
+  {% if not groups %}<p class="empty">아직 음원이 없어요.</p>{% endif %}
+  <p id="noLibResult" class="empty" style="display:none;">검색 결과가 없어요.</p>
 
-  {% for f in files %}
-  <div class="student-card lib-item" data-name="{{ f.name|lower }}">
-    <div class="student-head">
-      <span class="name" style="word-break:break-all;">{{ f.name }} <span class="empty">({{ f.size_mb }}MB)</span></span>
-      <form method="post" action="/admin/library/delete" onsubmit="return confirm('이 음원을 보관함에서 삭제할까요? 진도표에 배정돼 있던 곳에서는 사라져요.')">
-        <input type="hidden" name="filename" value="{{ f.name }}">
-        <button type="submit" class="btn-danger">삭제</button>
-      </form>
+  {% for g in groups %}
+  <details class="lib-group panel" style="padding:0;" {% if groups|length == 1 %}open{% endif %}>
+    <summary style="cursor:pointer;padding:14px 20px;font-weight:700;">📁 {{ g.name }} <span class="empty">({{ g.files|length }}개)</span></summary>
+    <div style="padding:0 16px 8px;">
+    {% for f in g.files %}
+    <div class="student-card lib-item" data-name="{{ f.name|lower }}">
+      <div class="student-head">
+        <span class="name" style="word-break:break-all;">{{ f.short }} <span class="empty">({{ f.size_mb }}MB)</span></span>
+        <form method="post" action="/admin/library/delete" onsubmit="return confirm('이 음원을 보관함에서 삭제할까요? 진도표에 배정돼 있던 곳에서는 사라져요.')">
+          <input type="hidden" name="filename" value="{{ f.name }}">
+          <button type="submit" class="btn-danger">삭제</button>
+        </form>
+      </div>
+      <audio controls preload="none" src="{{ f.url }}" style="width:100%;"></audio>
+      <details style="margin-top:10px;">
+        <summary style="cursor:pointer;font-weight:700;font-size:0.9rem;">정답 스크립트 {% if f.answer %}(입력됨){% else %}(없음){% endif %}</summary>
+        <form method="post" action="/admin/library/script" style="margin-top:8px;">
+          <input type="hidden" name="filename" value="{{ f.name }}">
+          <div class="empty" style="margin-bottom:4px;">학생이 "정답 보기"로 확인해요. 비워두면 정답 보기 버튼이 안 보여요.</div>
+          <textarea name="text" placeholder="정답 스크립트를 그대로 입력해주세요.">{{ f.answer }}</textarea>
+          <button type="submit" class="btn-outline">정답 저장</button>
+        </form>
+      </details>
+      <details style="margin-top:8px;">
+        <summary style="cursor:pointer;font-weight:700;font-size:0.9rem;">이름·묶음 바꾸기</summary>
+        <form method="post" action="/admin/library/rename" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+          <input type="hidden" name="filename" value="{{ f.name }}">
+          <input type="text" name="new_name" value="{{ f.name }}" style="flex:1;min-width:240px;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;">
+          <button type="submit" class="btn-outline">이름 바꾸기</button>
+        </form>
+        <div class="empty" style="margin-top:4px;">"묶음 - 파일이름" 형태로 적으면 그 묶음으로 옮겨져요. (예: I can talk 1 - 순차.mp3)</div>
+      </details>
     </div>
-    <audio controls preload="none" src="{{ f.url }}" style="width:100%;"></audio>
-    <details style="margin-top:10px;">
-      <summary style="cursor:pointer;font-weight:700;font-size:0.9rem;">정답 스크립트 {% if f.answer %}(입력됨){% else %}(없음){% endif %}</summary>
-      <form method="post" action="/admin/library/script" style="margin-top:8px;">
-        <input type="hidden" name="filename" value="{{ f.name }}">
-        <div class="empty" style="margin-bottom:4px;">학생이 "정답 보기"로 확인해요. 비워두면 정답 보기 버튼이 안 보여요.</div>
-        <textarea name="text" placeholder="정답 스크립트를 그대로 입력해주세요.">{{ f.answer }}</textarea>
-        <button type="submit" class="btn-outline">정답 저장</button>
-      </form>
-    </details>
-  </div>
+    {% endfor %}
+    </div>
+  </details>
   {% endfor %}
 </div>
 <script>
   const li = document.getElementById('libSearch');
   if (li) li.addEventListener('input', () => {
     const q = li.value.trim().toLowerCase();
-    document.querySelectorAll('.lib-item').forEach(c => { c.style.display = (c.dataset.name || '').includes(q) ? '' : 'none'; });
+    let shown = 0;
+    document.querySelectorAll('.lib-group').forEach(g => {
+      let any = 0;
+      g.querySelectorAll('.lib-item').forEach(c => {
+        const ok = (c.dataset.name || '').includes(q);
+        c.style.display = ok ? '' : 'none';
+        if (ok) any++;
+      });
+      g.style.display = any ? '' : 'none';
+      if (q) g.open = any > 0;
+      shown += any;
+    });
+    const n = document.getElementById('noLibResult');
+    if (n) n.style.display = (q && shown === 0) ? 'block' : 'none';
   });
 </script>
 </body>
