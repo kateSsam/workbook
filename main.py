@@ -343,8 +343,19 @@ async def api_upload_recording(token: str, lesson: str = "day1", file: UploadFil
 
 # ------------------------------------------------------------------ admin ---
 
+def _kst_str(iso: str) -> str:
+    try:
+        dt = datetime.fromisoformat(iso)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        k = dt.astimezone(timezone(timedelta(hours=9)))
+        return f"{k.month}/{k.day} {k.hour:02d}:{k.minute:02d}"
+    except (TypeError, ValueError):
+        return ""
+
+
 @app.get("/admin", response_class=HTMLResponse)
-def admin_home(request: Request, key: Optional[str] = None, day: Optional[int] = None):
+def admin_home(request: Request, key: Optional[str] = None, day: Optional[int] = None, sel: Optional[str] = None):
     # 예전 방식(주소에 ?key=...)으로 들어와도, 쿠키로 바꿔 주고 깨끗한 주소로 다시 보내요
     if key:
         if key_ok(key):
@@ -353,31 +364,59 @@ def admin_home(request: Request, key: Optional[str] = None, day: Optional[int] =
     if not is_admin(request):
         return HTMLResponse(LOGIN_PAGE.format(msg=""))
 
-    sel_day = day if day and 1 <= day <= lessons.MAX_DAYS else 1
-    lid = lessons.day_lesson_id(sel_day)
     today = kst_today()
-
     students_view = []
     for s in db.list_students():
         progress = db.all_progress_for_student(s["id"])
         recordings = db.list_recordings(s["id"])
-        rec_days = sorted({lessons.parse_day(r["lesson_id"]) for r in recordings if lessons.parse_day(r["lesson_id"])})
+        feedbacks = db.all_feedback_for_student(s["id"])
         start = student_start(s)
         sd = student_day(s)
+        today_slot = min(sd, lessons.MAX_DAYS) if sd >= 1 else 0
         plan = db.get_plan(s["id"])
+
+        recs_by_lid = {}
+        for r in recordings:
+            recs_by_lid.setdefault(r["lesson_id"], []).append({
+                "filename": r["filename"], "time": _kst_str(r["uploaded_at"]),
+            })
+
+        days = []
+        for n in range(today_slot, 0, -1):
+            lid = lessons.day_lesson_id(n)
+            st = progress.get(lid, {}).get("state", {})
+            recs = recs_by_lid.get(lid, [])
+            fb = feedbacks.get(lid, "")
+            days.append({
+                "n": n, "lid": lid, "label": day_label(start, n),
+                "audios": plan_files(plan, n),
+                "state": st, "recordings": recs, "feedback": fb,
+                "new": bool(recs) and not fb.strip(),
+            })
+
+        recent = []
+        for r in recordings[:3]:
+            n = lessons.parse_day(r["lesson_id"])
+            recent.append({"filename": r["filename"], "time": _kst_str(r["uploaded_at"]), "n": n})
+
+        selected = today_slot
+        if sel and ":" in sel:
+            sid, _, dn = sel.partition(":")
+            if sid == str(s["id"]) and dn.isdigit() and 1 <= int(dn) <= today_slot:
+                selected = int(dn)
+
         students_view.append(
             {
                 "row": s,
                 "today_day": sd,
                 "rest": today.weekday() >= 5,
-                "today_audios": plan_files(plan, min(sd, lessons.MAX_DAYS)) if sd >= 1 else [],
-                "day_audios": plan_files(plan, sel_day),
-                "day_date": day_label(start, sel_day),
+                "today_audios": plan_files(plan, today_slot) if today_slot else [],
                 "plan_count": len(plan),
-                "state": progress.get(lid, {}).get("state", {}),
-                "recordings": [r for r in recordings if r["lesson_id"] == lid],
-                "rec_days": rec_days,
-                "feedback": db.get_feedback(s["id"], lid),
+                "days": days,
+                "selected": selected,
+                "recent": recent,
+                "new_count": sum(1 for x in days if x["new"]),
+                "rec_days": sorted({x["n"] for x in days if x["recordings"]}),
                 "link": f"/w/{s['token']}",
             }
         )
@@ -389,9 +428,6 @@ def admin_home(request: Request, key: Optional[str] = None, day: Optional[int] =
             "key": "",
             "active_tab": "students",
             "students": students_view,
-            "sel_day": sel_day,
-            "lid": lid,
-            "max_days": lessons.MAX_DAYS,
             "today": today.isoformat(),
             "library_count": len(list_library()),
         },
@@ -584,7 +620,7 @@ def admin_set_start_date(student_id: int, request: Request, key: Optional[str] =
     if not sd:
         raise HTTPException(status_code=400, detail="날짜 형식이 올바르지 않아요.")
     db.set_student_start_date(student_id, sd)
-    return RedirectResponse(url=f"/admin?day={day}", status_code=303)
+    return RedirectResponse(url=f"/admin#card-{student_id}", status_code=303)
 
 
 @app.post("/admin/students/{student_id}/delete")
@@ -605,7 +641,8 @@ def admin_save_feedback(
     if lessons.parse_day(lesson_id) is None:
         raise HTTPException(status_code=404, detail="존재하지 않는 Day입니다.")
     db.set_feedback(student_id, lesson_id, text)
-    return _admin_redirect(key, lesson_id)
+    n = lessons.parse_day(lesson_id)
+    return RedirectResponse(url=f"/admin?sel={student_id}:{n}#card-{student_id}", status_code=303)
 
 
 @app.get("/admin/recording/{filename}")

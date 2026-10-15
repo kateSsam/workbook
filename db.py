@@ -496,3 +496,10 @@ def rename_audio_refs(old: str, new: str):
             conn.execute("UPDATE plan_slots SET audios_json = ? WHERE id = ?", (json.dumps(files, ensure_ascii=False), r["id"]))
     conn.commit()
     conn.close()
+
+
+def all_feedback_for_student(student_id: int) -> dict:
+    conn = get_conn()
+    rows = conn.execute("SELECT lesson_id, text FROM teacher_feedback WHERE student_id = ?", (student_id,)).fetchall()
+    conn.close()
+    return {r["lesson_id"]: r["text"] for r in rows}

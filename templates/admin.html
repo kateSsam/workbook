@@ -72,15 +72,6 @@
   <div class="panel">
     <h3 style="margin:0 0 8px;font-family:'Noto Serif KR',serif;font-size:1.05rem;">음원과 진도표</h3>
     <p class="sub" style="margin-bottom:12px;">① <a href="/admin/library">음원 보관함</a>에 음원을 올려두고(현재 {{ library_count }}개), ② 아래 학생 카드의 <strong>진도표 편집</strong>에서 학생마다 월~금 하루에 연습할 음원을 하나씩 정해요. 주말은 쉬어요.</p>
-    <form method="get" action="/admin" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-      <label style="font-size:0.88rem;color:var(--ink-soft);">아래 카드에서 확인할 Day</label>
-      <select name="day" onchange="this.form.submit()" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper-raised);color:var(--ink);">
-        {% for n in range(1, max_days + 1) %}
-        <option value="{{ n }}" {% if n == sel_day %}selected{% endif %}>Day {{ n }}</option>
-        {% endfor %}
-      </select>
-      <noscript><button type="submit" class="btn-outline">이동</button></noscript>
-    </form>
   </div>
 
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
@@ -95,9 +86,9 @@
   <p id="noSearchResult" class="empty" style="display:none;">검색 결과가 없어요.</p>
 
   {% for sv in students %}
-  <div class="student-card" data-name="{{ sv.row.name|lower }}">
+  <div class="student-card" id="card-{{ sv.row.id }}" data-name="{{ sv.row.name|lower }}">
     <div class="student-head">
-      <span class="name">{{ sv.row.name }}</span>
+      <span class="name">{{ sv.row.name }}{% if sv.new_count %} <span class="pill" style="background:var(--coral);color:#fff;">새 녹음 {{ sv.new_count }}</span>{% endif %}</span>
       <form method="post" action="/admin/students/{{ sv.row.id }}/delete" onsubmit="return confirm('{{ sv.row.name }} 학생을 삭제할까요? 기록도 함께 삭제됩니다.')">
         <button type="submit" class="btn-danger">학생 삭제</button>
       </form>
@@ -108,7 +99,6 @@
     </div>
 
     <form method="post" action="/admin/students/{{ sv.row.id }}/start-date" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0;font-size:0.85rem;color:var(--ink-soft);">
-      <input type="hidden" name="day" value="{{ sel_day }}">
       시작일
       <input type="date" name="start_date" value="{{ sv.row.start_date }}" style="padding:6px;border:1px solid var(--line);border-radius:8px;font-family:inherit;">
       <button type="submit" class="btn-outline copy-btn">변경</button>
@@ -120,45 +110,80 @@
         <span class="empty">오늘 음원: {% if sv.today_audios %}{{ sv.today_audios|join(' + ') }}{% else %}배정 안 됨{% endif %}</span>
       {% endif %}
     </div>
-    <div class="empty" style="margin-bottom:6px;">녹음을 제출한 Day: {% if sv.rec_days %}{% for n in sv.rec_days %}Day {{ n }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}없음{% endif %}</div>
 
-    <div style="font-weight:700;margin:12px 0 4px;">Day {{ sel_day }} · {{ sv.day_date }}{% if sv.day_audios %} · {{ sv.day_audios|join(" + ") }}{% endif %}</div>
-    {% set st = sv.state %}
-    {% set done = st.get('done', {}) %}
-    <div class="stage-pills">
-      <span class="pill {{ 'done' if done.get('train') or done.get('review') }}">훈련</span>
-    </div>
-
-    {% set my_script = st.get('myScript', {}) %}
-    {% for stage in ['train', 'preview', 'review'] %}
-      {% if my_script.get(stage) %}
-        <div style="margin-bottom:10px;">
-          <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:4px;">{{ stage_labels[stage] }} 때 학생이 적은 내용</div>
-          <div class="note-box" style="margin-top:0;">{{ my_script.get(stage) }}</div>
-        </div>
-      {% endif %}
-    {% endfor %}
-
-    <div class="recordings">
-      {% if sv.recordings %}
-        {% for r in sv.recordings %}
-          <audio controls src="/admin/recording/{{ r.filename }}"></audio>
+    <div style="margin:10px 0;">
+      <div style="font-weight:700;font-size:0.9rem;margin-bottom:4px;">🎙️ 최근 녹음</div>
+      {% if sv.recent %}
+        {% for r in sv.recent %}
+          <div class="empty" style="margin-top:6px;">Day {{ r.n }} · {{ r.time }}</div>
+          <audio controls preload="none" src="/admin/recording/{{ r.filename }}" style="width:100%;"></audio>
         {% endfor %}
       {% else %}
-        <p class="empty">이 Day에 제출된 녹음이 없어요.</p>
+        <p class="empty" style="margin:0;">아직 제출된 녹음이 없어요.</p>
       {% endif %}
     </div>
 
-    <form class="fb-form" method="post" action="/admin/feedback">
-      <input type="hidden" name="student_id" value="{{ sv.row.id }}">
-      <input type="hidden" name="lesson_id" value="{{ lid }}">
-      <textarea name="text" placeholder="이 학생에게 남길 피드백을 적어주세요">{{ sv.feedback }}</textarea>
-      <button type="submit" class="btn-primary">피드백 저장</button>
-    </form>
+    {% if sv.days %}
+    <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:12px;">
+      <label style="font-size:0.88rem;color:var(--ink-soft);">Day별로 보기
+        <select class="day-select" data-card="{{ sv.row.id }}" style="margin-left:6px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper-raised);color:var(--ink);">
+          {% for dd in sv.days %}
+          <option value="{{ dd.n }}" {% if dd.n == sv.selected %}selected{% endif %}>Day {{ dd.n }} · {{ dd.label }}{% if dd.recordings %} 🎙️{% endif %}{% if dd.new %} (새 녹음){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      {% for dd in sv.days %}
+      <div class="day-panel" data-card="{{ sv.row.id }}" data-day="{{ dd.n }}" style="{% if dd.n != sv.selected %}display:none;{% endif %}margin-top:10px;">
+        <div style="font-weight:700;margin:0 0 4px;">Day {{ dd.n }} · {{ dd.label }}{% if dd.audios %} · {{ dd.audios|join(' + ') }}{% endif %}</div>
+        {% set done = dd.state.get('done', {}) %}
+        <div class="stage-pills">
+          <span class="pill {{ 'done' if done.get('train') or done.get('review') }}">훈련</span>
+        </div>
+
+        {% set my_script = dd.state.get('myScript', {}) %}
+        {% for stage in ['train', 'preview', 'review'] %}
+          {% if my_script.get(stage) %}
+            <div style="margin-bottom:10px;">
+              <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:4px;">학생이 적은 내용</div>
+              <div class="note-box" style="margin-top:0;">{{ my_script.get(stage) }}</div>
+            </div>
+          {% endif %}
+        {% endfor %}
+
+        <div class="recordings">
+          {% if dd.recordings %}
+            {% for r in dd.recordings %}
+              <div class="empty">제출 {{ r.time }}</div>
+              <audio controls preload="none" src="/admin/recording/{{ r.filename }}"></audio>
+            {% endfor %}
+          {% else %}
+            <p class="empty">이 Day에 제출된 녹음이 없어요.</p>
+          {% endif %}
+        </div>
+
+        <form class="fb-form" method="post" action="/admin/feedback">
+          <input type="hidden" name="student_id" value="{{ sv.row.id }}">
+          <input type="hidden" name="lesson_id" value="{{ dd.lid }}">
+          <textarea name="text" placeholder="이 학생에게 남길 피드백을 적어주세요">{{ dd.feedback }}</textarea>
+          <button type="submit" class="btn-primary">피드백 저장</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
   </div>
   {% endfor %}
 </div>
 <script>
+  document.querySelectorAll('.day-select').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const card = sel.dataset.card;
+      document.querySelectorAll('.day-panel[data-card="' + card + '"]').forEach(p => {
+        p.style.display = (p.dataset.day === sel.value) ? '' : 'none';
+      });
+    });
+  });
   const searchInput = document.getElementById('studentSearch');
   if (searchInput) {
     searchInput.addEventListener('input', () => {
