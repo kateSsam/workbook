@@ -55,11 +55,7 @@
 </head>
 <body>
 <div class="wrap">
-  <nav class="topnav">
-    <a href="/admin" class="{{ 'on' if active_tab == 'students' else '' }}">학생 관리</a>
-    <a href="/admin/inquiries" class="{{ 'on' if active_tab == 'inquiries' else '' }}">상담 신청</a>
-    <a href="/admin/logout" class="out">로그아웃</a>
-  </nav>
+  {% include "_nav.html" %}
   <h1>상담 신청 내역</h1>
   <p class="sub">홈페이지 상담 신청서로 들어온 내용이에요. 최신 신청이 맨 위에 있어요.</p>
 

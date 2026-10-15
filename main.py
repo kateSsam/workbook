@@ -12,8 +12,8 @@ import urllib.parse
 import urllib.request
 import uuid
 import zipfile
-from datetime import datetime, timezone, date
-from typing import Optional
+from datetime import datetime, timezone, date, timedelta
+from typing import List, Optional
 
 from fastapi import FastAPI, Request, Form, UploadFile, File, HTTPException, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, JSONResponse, StreamingResponse
@@ -40,26 +40,22 @@ db.init_db()
 
 
 def seed_lesson_audio():
-    """처음 실행될 때, seed_audio/ 안의 파일을 data/lesson_audio/ 로 복사해둔다.
+    """서버가 켜질 때, GitHub의 seed_audio/ 안의 음원(하위 폴더 포함)을 data/lesson_audio/ 로 복사해둔다.
+    하위 폴더에 있는 파일은 '폴더이름 - 파일이름' 으로 보관함에 올라간다.
     (data/ 는 배포 환경에서 초기화될 수 있는 저장소라, 깃에 포함되는 seed_audio/ 에서 복원한다.)"""
     if not os.path.isdir(SEED_AUDIO_DIR):
         return
-    for path in glob.glob(os.path.join(SEED_AUDIO_DIR, "*")):
-        fname = os.path.basename(path)
-        dest = os.path.join(AUDIO_DIR, fname)
-        if not os.path.exists(dest):
-            shutil.copyfile(path, dest)
+    for root, _dirs, files in os.walk(SEED_AUDIO_DIR):
+        for fname in files:
+            if os.path.splitext(fname)[1].lower() not in {".mp3", ".m4a", ".wav", ".ogg", ".aac", ".flac", ".webm", ".mp4", ".oga"}:
+                continue
+            rel = os.path.relpath(os.path.join(root, fname), SEED_AUDIO_DIR)
+            name = " - ".join(rel.split(os.sep))
+            dest = os.path.join(AUDIO_DIR, name)
+            if not os.path.exists(dest):
+                shutil.copyfile(os.path.join(root, fname), dest)
 
 
-def migrate_legacy_audio():
-    """예전 이름(lesson1_preview.mp3 등)의 음원을 day1_ 로 바꿔줌."""
-    for path in glob.glob(os.path.join(AUDIO_DIR, "lesson1_*")):
-        dest = os.path.join(AUDIO_DIR, "day1_" + os.path.basename(path)[len("lesson1_"):])
-        if not os.path.exists(dest):
-            os.rename(path, dest)
-
-
-migrate_legacy_audio()
 seed_lesson_audio()
 
 
@@ -71,21 +67,80 @@ def kst_today() -> date:
     return db.kst_today()
 
 
-def student_day(student) -> int:
-    """오늘이 이 학생의 몇 번째 Day인지. 시작일 전이면 0."""
+WEEKDAYS_KO = "월화수목금토일"
+
+
+def student_start(student) -> date:
     try:
-        start = date.fromisoformat(student["start_date"])
+        return date.fromisoformat(student["start_date"])
     except (TypeError, ValueError):
-        start = kst_today()
-    return (kst_today() - start).days + 1
+        return kst_today()
 
 
-def find_lesson_audio(lesson_id: str, stage: str) -> Optional[str]:
-    matches = glob.glob(os.path.join(AUDIO_DIR, f"{lesson_id}_{stage}.*"))
-    return matches[0] if matches else None
+def slot_for_date(start: date, d: date) -> int:
+    """start부터 d까지(포함) 평일(월~금)이 며칠인지 = 수업일 번호(Day N). 시작 전이면 0."""
+    if d < start:
+        return 0
+    total = (d - start).days + 1
+    weeks, rem = divmod(total, 7)
+    count = weeks * 5
+    for i in range(rem):
+        if (start + timedelta(days=weeks * 7 + i)).weekday() < 5:
+            count += 1
+    return count
 
 
-STAGES_WITH_AUDIO = ["preview", "review"]
+def date_for_slot(start: date, n: int) -> date:
+    d, c = start, 0
+    while True:
+        if d.weekday() < 5:
+            c += 1
+            if c == n:
+                return d
+        d += timedelta(days=1)
+
+
+def day_label(start: date, n: int) -> str:
+    d = date_for_slot(start, n)
+    return f"{d.month}/{d.day}({WEEKDAYS_KO[d.weekday()]})"
+
+
+def student_day(student) -> int:
+    """오늘이 이 학생의 몇 번째 수업일(Day)인지. 주말엔 직전 금요일의 번호, 시작 전이면 0."""
+    return slot_for_date(student_start(student), kst_today())
+
+
+# ---- 음원 보관함: data/lesson_audio 안의 음원 파일 전부 (파일명은 자유) ----
+AUDIO_EXTS = {".mp3", ".m4a", ".wav", ".ogg", ".aac", ".flac", ".webm", ".mp4", ".oga"}
+
+
+def safe_audio_name(name: str) -> str:
+    base = os.path.basename((name or "").replace("\\", "/")).strip().lstrip(".")
+    return base
+
+
+def audio_path(name: str) -> Optional[str]:
+    base = safe_audio_name(name)
+    if not base or os.path.splitext(base)[1].lower() not in AUDIO_EXTS:
+        return None
+    p = os.path.join(AUDIO_DIR, base)
+    return p if os.path.isfile(p) else None
+
+
+def list_library() -> List[str]:
+    names = [f for f in os.listdir(AUDIO_DIR)
+             if os.path.isfile(os.path.join(AUDIO_DIR, f)) and os.path.splitext(f)[1].lower() in AUDIO_EXTS]
+    return sorted(names, key=lambda s: s.lower())
+
+
+def plan_files(plan: dict, slot: int) -> List[str]:
+    return [f for f in plan.get(slot, []) if audio_path(f)]
+
+
+def student_allowed_audio(student, filename: str) -> bool:
+    today_n = min(student_day(student), lessons.MAX_DAYS)
+    plan = db.get_plan(student["id"])
+    return any(filename in files for slot, files in plan.items() if slot <= today_n)
 
 
 # ---- 관리자 로그인 (주소에 열쇠가 남지 않도록 브라우저 쿠키로 로그인 유지) ----
@@ -170,32 +225,36 @@ def workbook(request: Request, token: str, day: Optional[int] = None):
     if not student:
         raise HTTPException(status_code=404, detail="유효하지 않은 링크입니다. 선생님께 링크를 다시 받아주세요.")
 
+    start = student_start(student)
     today_n = student_day(student)
     if today_n < 1:
+        first = date_for_slot(start, 1)
         return HTMLResponse(
             "<body style='font-family:sans-serif;padding:40px;line-height:1.8;text-align:center'>"
             f"<h2>{student['name']}님, 아직 시작 전이에요</h2>"
-            f"<p>워크북은 <strong>{student['start_date']}</strong> 에 시작돼요.<br>그날 다시 이 링크로 들어와주세요!</p></body>"
+            f"<p>워크북은 <strong>{first.month}월 {first.day}일({WEEKDAYS_KO[first.weekday()]})</strong> 에 시작돼요.<br>그날 다시 이 링크로 들어와주세요!</p></body>"
         )
     today_n = min(today_n, lessons.MAX_DAYS)
+    rest_day = kst_today().weekday() >= 5
     day_n = day if day and 1 <= day <= today_n else today_n
     lesson = lessons.day_lesson_id(day_n)
 
+    plan = db.get_plan(student["id"])
+    audios = []
+    for f in plan_files(plan, day_n):
+        audios.append({
+            "url": f"/audio/{urllib.parse.quote(f)}?t={token}",
+            "name": f,
+            "answer_preview": db.get_script("audio:" + f, "preview"),
+            "answer_review": db.get_script("audio:" + f, "review"),
+        })
+
     lesson_data = dict(lessons.BASE_LESSON)
-    stage_audio = {}
-    for stage in STAGES_WITH_AUDIO:
-        path = find_lesson_audio(lesson, stage)
-        if path:
-            name = db.get_audio_original_name(lesson, stage) or os.path.basename(path)
-            stage_audio[stage] = {"url": f"/lesson-audio/{lesson}?stage={stage}&t={token}", "name": name}
-        else:
-            stage_audio[stage] = None
-    lesson_data["stage_audio"] = stage_audio
-    lesson_data["preview_answer"] = db.get_script(lesson, "preview")
-    lesson_data["review_answer"] = db.get_script(lesson, "review")
+    lesson_data["audios"] = audios
 
     state = db.get_progress(student["id"], lesson)
     feedback_text = db.get_feedback(student["id"], lesson)
+    days = [{"n": n, "label": day_label(start, n)} for n in range(today_n, 0, -1)]
 
     return templates.TemplateResponse(
         "workbook.html",
@@ -206,6 +265,9 @@ def workbook(request: Request, token: str, day: Optional[int] = None):
             "lesson_id": lesson,
             "day_n": day_n,
             "today_n": today_n,
+            "day_label": day_label(start, day_n),
+            "rest_day": rest_day,
+            "days": days,
             "lesson": lesson_data,
             "initial_state": state,
             "teacher_feedback": feedback_text,
@@ -230,18 +292,18 @@ async def api_save_state(request: Request, token: str, lesson: str = "day1"):
     return db.save_progress(student["id"], lesson, patch)
 
 
-@app.get("/lesson-audio/{lesson_id}")
-def get_lesson_audio(request: Request, lesson_id: str, stage: str = "review", t: Optional[str] = None, key: Optional[str] = None):
-    # 관리자(key) 또는 해당 날짜에 접근 가능한 학생(t=링크 토큰)만 들을 수 있어요. (미래 Day 음원은 막힘)
+@app.get("/audio/{filename}")
+def get_audio(request: Request, filename: str, t: Optional[str] = None, key: Optional[str] = None):
+    # 관리자 또는 이 음원이 이미 열린 날짜에 배정된 학생(t=링크 토큰)만 들을 수 있어요.
     if is_admin(request) or key:
         check_admin(request, key)
     else:
         student = db.get_student_by_token(t or "")
-        if not student or not _allowed_lesson(student, lesson_id):
+        if not student or not student_allowed_audio(student, safe_audio_name(filename)):
             raise HTTPException(status_code=404, detail="아직 열리지 않았어요.")
-    path = find_lesson_audio(lesson_id, stage)
+    path = audio_path(filename)
     if not path:
-        raise HTTPException(status_code=404, detail="아직 등록된 음원이 없어요.")
+        raise HTTPException(status_code=404, detail="음원을 찾을 수 없어요.")
     media_type, _ = mimetypes.guess_type(path)
     return FileResponse(path, media_type=media_type or "audio/mpeg")
 
@@ -280,17 +342,25 @@ def admin_home(request: Request, key: Optional[str] = None, day: Optional[int] =
 
     sel_day = day if day and 1 <= day <= lessons.MAX_DAYS else 1
     lid = lessons.day_lesson_id(sel_day)
+    today = kst_today()
 
     students_view = []
     for s in db.list_students():
         progress = db.all_progress_for_student(s["id"])
         recordings = db.list_recordings(s["id"])
         rec_days = sorted({lessons.parse_day(r["lesson_id"]) for r in recordings if lessons.parse_day(r["lesson_id"])})
+        start = student_start(s)
         sd = student_day(s)
+        plan = db.get_plan(s["id"])
         students_view.append(
             {
                 "row": s,
                 "today_day": sd,
+                "rest": today.weekday() >= 5,
+                "today_audios": plan_files(plan, min(sd, lessons.MAX_DAYS)) if sd >= 1 else [],
+                "day_audios": plan_files(plan, sel_day),
+                "day_date": day_label(start, sel_day),
+                "plan_count": len(plan),
                 "state": progress.get(lid, {}).get("state", {}),
                 "recordings": [r for r in recordings if r["lesson_id"] == lid],
                 "rec_days": rec_days,
@@ -298,18 +368,6 @@ def admin_home(request: Request, key: Optional[str] = None, day: Optional[int] =
                 "link": f"/w/{s['token']}",
             }
         )
-
-    def display_audio_name(stage):
-        path = find_lesson_audio(lid, stage)
-        if not path:
-            return None
-        return db.get_audio_original_name(lid, stage) or os.path.basename(path)
-
-    # Day별 준비 현황(✓ = 음원 또는 정답 입력됨)
-    day_ready = {}
-    for n in range(1, lessons.MAX_DAYS + 1):
-        l = lessons.day_lesson_id(n)
-        day_ready[n] = any(find_lesson_audio(l, st) for st in STAGES_WITH_AUDIO)
 
     return templates.TemplateResponse(
         "admin.html",
@@ -321,11 +379,8 @@ def admin_home(request: Request, key: Optional[str] = None, day: Optional[int] =
             "sel_day": sel_day,
             "lid": lid,
             "max_days": lessons.MAX_DAYS,
-            "day_ready": day_ready,
-            "audio_info": {st: display_audio_name(st) for st in STAGES_WITH_AUDIO},
-            "answers": {"preview": db.get_script(lid, "preview"), "review": db.get_script(lid, "review")},
-            "stages_with_audio": STAGES_WITH_AUDIO,
-            "today": kst_today().isoformat(),
+            "today": today.isoformat(),
+            "library_count": len(list_library()),
         },
     )
 
@@ -336,50 +391,126 @@ def _admin_redirect(key: str = None, lesson_id: str = None):
     return RedirectResponse(url=f"/admin{suffix}", status_code=303)
 
 
-@app.post("/admin/lesson-audio")
-async def admin_upload_lesson_audio(
-    request: Request, key: Optional[str] = Form(None),
-    lesson_id: str = Form(...),
-    stage: str = Form(...),
-    file: UploadFile = File(...),
-):
-    check_admin(request, key)
-    if lessons.parse_day(lesson_id) is None:
-        raise HTTPException(status_code=404, detail="존재하지 않는 Day입니다.")
-    if stage not in STAGES_WITH_AUDIO:
-        raise HTTPException(status_code=400, detail="알 수 없는 단계입니다.")
+# ------------------------------------------------------------ 음원 보관함 ---
 
-    # 기존 파일(확장자 다를 수 있음, 이전 버전 파일명 포함) 제거 후 새로 저장
-    for old in glob.glob(os.path.join(AUDIO_DIR, f"{lesson_id}_{stage}.*")):
-        os.remove(old)
-
-    ext = ".mp3"
-    if file.filename and "." in file.filename:
-        ext = "." + file.filename.rsplit(".", 1)[-1]
-    dest_path = os.path.join(AUDIO_DIR, f"{lesson_id}_{stage}{ext}")
-    content = await file.read()
-    with open(dest_path, "wb") as f:
-        f.write(content)
-
-    db.set_audio_original_name(lesson_id, stage, file.filename or f"{lesson_id}_{stage}{ext}")
-
-    return _admin_redirect(key, lesson_id)
+@app.get("/admin/library", response_class=HTMLResponse)
+def admin_library(request: Request):
+    if not is_admin(request):
+        return RedirectResponse(url="/admin", status_code=303)
+    files = []
+    for f in list_library():
+        files.append({
+            "name": f,
+            "url": "/audio/" + urllib.parse.quote(f),
+            "size_mb": round(os.path.getsize(os.path.join(AUDIO_DIR, f)) / 1048576, 1),
+            "answer_preview": db.get_script("audio:" + f, "preview"),
+            "answer_review": db.get_script("audio:" + f, "review"),
+        })
+    return templates.TemplateResponse("library.html", {"request": request, "active_tab": "library", "files": files})
 
 
-@app.post("/admin/answer-script")
-def admin_save_answer_script(
-    request: Request, key: Optional[str] = Form(None),
-    lesson_id: str = Form(...),
-    stage: str = Form(...),
-    text: str = Form(""),
-):
-    check_admin(request, key)
-    if lessons.parse_day(lesson_id) is None:
-        raise HTTPException(status_code=404, detail="존재하지 않는 Day입니다.")
-    if stage not in ("preview", "review"):
-        raise HTTPException(status_code=400, detail="알 수 없는 단계입니다.")
-    db.set_script(lesson_id, stage, text)
-    return _admin_redirect(key, lesson_id)
+@app.post("/admin/library/upload")
+async def admin_library_upload(request: Request, files: List[UploadFile] = File(...)):
+    check_admin(request, None)
+    for up in files:
+        name = safe_audio_name(up.filename or "")
+        if not name or os.path.splitext(name)[1].lower() not in AUDIO_EXTS:
+            continue
+        content = await up.read()
+        with open(os.path.join(AUDIO_DIR, name), "wb") as out:
+            out.write(content)
+    return RedirectResponse(url="/admin/library", status_code=303)
+
+
+@app.post("/admin/library/delete")
+def admin_library_delete(request: Request, filename: str = Form(...)):
+    check_admin(request, None)
+    p = audio_path(filename)
+    if p:
+        os.remove(p)
+    return RedirectResponse(url="/admin/library", status_code=303)
+
+
+@app.post("/admin/library/script")
+def admin_library_script(request: Request, filename: str = Form(...), preview: str = Form(""), review: str = Form("")):
+    check_admin(request, None)
+    if not audio_path(filename):
+        raise HTTPException(status_code=404, detail="음원을 찾을 수 없어요.")
+    db.set_script("audio:" + safe_audio_name(filename), "preview", preview)
+    db.set_script("audio:" + safe_audio_name(filename), "review", review)
+    return RedirectResponse(url="/admin/library", status_code=303)
+
+
+# ------------------------------------------------------------ 학생별 진도표 ---
+
+def _plan_page_data(student):
+    start = student_start(student)
+    plan = db.get_plan(student["id"])
+    weeks = []
+    for w in range(lessons.MAX_DAYS // 5):
+        slots = []
+        for i in range(5):
+            n = w * 5 + i + 1
+            files = plan.get(n, [])
+            slots.append({
+                "n": n,
+                "label": day_label(start, n),
+                "a": files[0] if len(files) > 0 else "",
+                "b": files[1] if len(files) > 1 else "",
+            })
+        weeks.append({"no": w + 1, "slots": slots, "filled": any(s["a"] or s["b"] for s in slots)})
+    return weeks
+
+
+@app.get("/admin/students/{student_id}/plan", response_class=HTMLResponse)
+def admin_plan(request: Request, student_id: int, saved: int = 0):
+    if not is_admin(request):
+        return RedirectResponse(url="/admin", status_code=303)
+    student = db.get_student_by_id(student_id)
+    if not student:
+        raise HTTPException(status_code=404, detail="학생을 찾을 수 없어요.")
+    others = [s for s in db.list_students() if s["id"] != student_id]
+    return templates.TemplateResponse(
+        "plan.html",
+        {
+            "request": request,
+            "active_tab": "students",
+            "student": student,
+            "weeks": _plan_page_data(student),
+            "library": list_library(),
+            "others": others,
+            "today_day": student_day(student),
+            "saved": bool(saved),
+        },
+    )
+
+
+@app.post("/admin/students/{student_id}/plan")
+async def admin_plan_save(request: Request, student_id: int):
+    check_admin(request, None)
+    if not db.get_student_by_id(student_id):
+        raise HTTPException(status_code=404, detail="학생을 찾을 수 없어요.")
+    form = await request.form()
+    plan = {}
+    for n in range(1, lessons.MAX_DAYS + 1):
+        files = []
+        for part in ("a", "b"):
+            v = safe_audio_name(str(form.get(f"s{n}_{part}", "")))
+            if v and v not in files:
+                files.append(v)
+        if files:
+            plan[n] = files
+    db.set_plan(student_id, plan)
+    return RedirectResponse(url=f"/admin/students/{student_id}/plan?saved=1", status_code=303)
+
+
+@app.post("/admin/students/{student_id}/plan/copy")
+def admin_plan_copy(request: Request, student_id: int, source_id: int = Form(...)):
+    check_admin(request, None)
+    if not db.get_student_by_id(student_id) or not db.get_student_by_id(source_id):
+        raise HTTPException(status_code=404, detail="학생을 찾을 수 없어요.")
+    db.set_plan(student_id, db.get_plan(source_id))
+    return RedirectResponse(url=f"/admin/students/{student_id}/plan?saved=1", status_code=303)
 
 
 @app.post("/admin/students")
@@ -487,12 +618,12 @@ async def admin_restore(request: Request, key: Optional[str] = Form(None), file:
                     with zf.open(name) as src, open(dest, "wb") as out:
                         out.write(src.read())
                 elif name.startswith("audio/") and not name.endswith("/"):
-                    base = os.path.basename(name)
-                    if base.startswith("lesson1_"):
-                        base = "day1_" + base[len("lesson1_"):]
-                    dest = os.path.join(AUDIO_DIR, base)
+                    dest = os.path.join(AUDIO_DIR, os.path.basename(name))
                     with zf.open(name) as src, open(dest, "wb") as out:
                         out.write(src.read())
+
+            for pl in data.get("plans", []):
+                db.restore_plan_row(pl["token"], pl["slot"], pl["audios_json"])
 
             for rec in data.get("recordings", []):
                 db.restore_recording_row(rec["token"], norm_lid(rec["lesson_id"]), rec["filename"], rec["uploaded_at"])

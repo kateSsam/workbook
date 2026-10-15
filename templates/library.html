@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>음원 보관함 — 관리자</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@700&display=swap" rel="stylesheet">
+<style>
+  :root { --paper:#FBF8F3; --paper-raised:#FFFFFF; --ink:#24211D; --ink-soft:#5B564C; --line:#DDD5C7; --teal:#1C5B57; --teal-soft:#E4EFEE; --coral:#D9613F; --gold:#B98B34; --gold-soft:#F6ECD9; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:'Noto Sans KR',sans-serif; line-height:1.6; }
+  .wrap { max-width:920px; margin:0 auto; padding:32px 20px 80px; }
+  h1 { font-family:'Noto Serif KR',serif; font-size:1.5rem; margin:0 0 6px; }
+  .sub { color:var(--ink-soft); margin-bottom:28px; }
+  .panel { background:var(--paper-raised); border:1px solid var(--line); border-radius:14px; padding:22px; margin-bottom:22px; }
+  .add-form { display:flex; gap:10px; flex-wrap:wrap; }
+  .add-form input[type=text] { flex:1; min-width:200px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-family:inherit; }
+  button, .btn { font-family:inherit; font-size:0.88rem; font-weight:700; padding:9px 16px; border-radius:999px; border:1px solid transparent; cursor:pointer; }
+  .btn-primary { background:var(--teal); color:#fff; }
+  .btn-outline { background:transparent; border-color:var(--line); color:var(--ink); }
+  .btn-danger { background:transparent; border-color:var(--coral); color:var(--coral); }
+  .student-card { border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin-bottom:14px; background:var(--paper-raised); }
+  .student-head { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px; }
+  .student-head .name { font-weight:700; font-size:1.05rem; }
+  .link-box { font-size:0.82rem; color:var(--ink-soft); word-break:break-all; }
+  .link-box a { color:var(--teal); }
+  .stage-pills { display:flex; gap:6px; margin:10px 0; }
+  .pill { font-size:0.74rem; padding:3px 9px; border-radius:999px; background:var(--teal-soft); color:var(--ink-soft); }
+  .pill.done { background:var(--teal); color:#fff; }
+  .recordings { margin-top:10px; }
+  .recordings audio { width:100%; margin:4px 0 10px; }
+  .fb-form textarea, textarea { width:100%; min-height:60px; padding:10px; border:1px solid var(--line); border-radius:8px; font-family:inherit; margin-bottom:8px; background:var(--paper-raised); color:var(--ink); }
+  .empty { color:var(--ink-soft); font-size:0.9rem; }
+  .note-box { background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:0.9rem; color:var(--ink); white-space:pre-wrap; }
+  .copy-btn { font-size:0.75rem; padding:3px 9px; }
+  .topnav { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:0 0 22px; }
+  .topnav a { text-decoration:none; font-weight:700; font-size:0.9rem; padding:8px 16px; border-radius:999px; border:1px solid var(--line); color:var(--ink); background:var(--paper-raised); }
+  .topnav a.on { background:var(--teal); color:#fff; border-color:var(--teal); }
+  .topnav .out { margin-left:auto; font-weight:500; color:var(--ink-soft); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  {% include "_nav.html" %}
+  <h1>음원 보관함</h1>
+  <p class="sub">연습 음원을 여기에 모아둬요. 파일 이름은 자유예요(학생이 저장할 때도 그 이름이에요). 학생별 진도표에서 이 음원들을 골라 배정해요.</p>
+
+  <div class="panel">
+    <h3 style="margin:0 0 8px;font-family:'Noto Serif KR',serif;font-size:1rem;">음원 올리기</h3>
+    <form method="post" action="/admin/library/upload" enctype="multipart/form-data" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <input type="file" name="files" accept="audio/*" multiple required>
+      <button type="submit" class="btn-primary">올리기</button>
+    </form>
+    <p class="empty" style="margin:10px 0 0;">여러 개를 한꺼번에 선택해서 올릴 수 있어요. 같은 이름으로 다시 올리면 교체돼요. GitHub의 <strong>seed_audio</strong> 폴더에 넣고 배포해도 여기에 자동으로 나타나요(서버가 초기화돼도 남아요).</p>
+  </div>
+
+  <h2 style="font-family:'Noto Serif KR',serif;font-size:1.15rem;margin:0 0 12px;">보관 중인 음원 ({{ files|length }}개)</h2>
+  {% if not files %}<p class="empty">아직 음원이 없어요.</p>{% endif %}
+  <input type="text" id="libSearch" placeholder="🔍 음원 이름 검색" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;min-width:220px;margin-bottom:12px;background:var(--paper-raised);color:var(--ink);">
+
+  {% for f in files %}
+  <div class="student-card lib-item" data-name="{{ f.name|lower }}">
+    <div class="student-head">
+      <span class="name" style="word-break:break-all;">{{ f.name }} <span class="empty">({{ f.size_mb }}MB)</span></span>
+      <form method="post" action="/admin/library/delete" onsubmit="return confirm('이 음원을 보관함에서 삭제할까요? 진도표에 배정돼 있던 곳에서는 사라져요.')">
+        <input type="hidden" name="filename" value="{{ f.name }}">
+        <button type="submit" class="btn-danger">삭제</button>
+      </form>
+    </div>
+    <audio controls preload="none" src="{{ f.url }}" style="width:100%;"></audio>
+    <details style="margin-top:10px;">
+      <summary style="cursor:pointer;font-weight:700;font-size:0.9rem;">정답 스크립트 {% if f.answer_preview or f.answer_review %}(입력됨){% else %}(없음){% endif %}</summary>
+      <form method="post" action="/admin/library/script" style="margin-top:8px;">
+        <input type="hidden" name="filename" value="{{ f.name }}">
+        <div class="empty" style="margin-bottom:4px;">예습 정답 (학생이 "정답 보기"로 확인해요)</div>
+        <textarea name="preview" placeholder="비워두면 정답 보기 버튼이 안 보여요.">{{ f.answer_preview }}</textarea>
+        <div class="empty" style="margin-bottom:4px;">복습 정답</div>
+        <textarea name="review" placeholder="비워두면 정답 보기 버튼이 안 보여요.">{{ f.answer_review }}</textarea>
+        <button type="submit" class="btn-outline">정답 저장</button>
+      </form>
+    </details>
+  </div>
+  {% endfor %}
+</div>
+<script>
+  const li = document.getElementById('libSearch');
+  if (li) li.addEventListener('input', () => {
+    const q = li.value.trim().toLowerCase();
+    document.querySelectorAll('.lib-item').forEach(c => { c.style.display = (c.dataset.name || '').includes(q) ? '' : 'none'; });
+  });
+</script>
+</body>
+</html>

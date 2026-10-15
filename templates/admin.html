@@ -42,11 +42,7 @@
 </head>
 <body>
 <div class="wrap">
-  <nav class="topnav">
-    <a href="/admin" class="on">학생 관리</a>
-    <a href="/admin/inquiries">상담 신청</a>
-    <a href="/admin/logout" class="out">로그아웃</a>
-  </nav>
+  {% include "_nav.html" %}
   <h1>발음/스피치 훈련 워크북 — 관리자</h1>
   <p class="sub">학생을 등록해서 개별 링크를 발급하고, 진행상황·녹음·피드백을 관리해요.</p>
 
@@ -65,7 +61,7 @@
   <div class="panel">
     <form class="add-form" method="post" action="/admin/students">
       <input type="text" name="name" placeholder="새 수강생 이름" required>
-      <label style="font-size:0.85rem;color:var(--ink-soft);display:flex;align-items:center;gap:6px;">시작일(Day 1)
+      <label style="font-size:0.85rem;color:var(--ink-soft);display:flex;align-items:center;gap:6px;">시작일(Day 1 · 월요일 추천)
         <input type="date" name="start_date" value="{{ today }}" style="padding:9px;border:1px solid var(--line);border-radius:8px;font-family:inherit;">
       </label>
       <button type="submit" class="btn-primary">학생 등록하고 링크 발급</button>
@@ -74,47 +70,17 @@
 
   {% set stage_labels = {'preview': '예습', 'review': '복습'} %}
   <div class="panel">
-    <h3 style="margin:0 0 10px;font-family:'Noto Serif KR',serif;font-size:1.05rem;">날짜(Day)별 콘텐츠 관리</h3>
-    <p class="sub" style="margin-bottom:14px;">학생마다 시작일부터 Day 1, 2, 3...이 매일 아침(한국시간 0시) 자동으로 열려요. 아래에서 Day를 고르고 음원과 정답을 미리 올려두세요. 아직 안 열린 Day의 음원은 학생이 접근할 수 없어요.</p>
-    <form method="get" action="/admin" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+    <h3 style="margin:0 0 8px;font-family:'Noto Serif KR',serif;font-size:1.05rem;">음원과 진도표</h3>
+    <p class="sub" style="margin-bottom:12px;">① <a href="/admin/library">음원 보관함</a>에 음원을 올려두고(현재 {{ library_count }}개), ② 아래 학생 카드의 <strong>진도표 편집</strong>에서 학생마다 월~금에 어떤 음원을 연습할지 정해요. 주말은 쉬어요.</p>
+    <form method="get" action="/admin" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <label style="font-size:0.88rem;color:var(--ink-soft);">아래 카드에서 확인할 Day</label>
       <select name="day" onchange="this.form.submit()" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper-raised);color:var(--ink);">
         {% for n in range(1, max_days + 1) %}
-        <option value="{{ n }}" {% if n == sel_day %}selected{% endif %}>Day {{ n }}{% if day_ready[n] %} ✓ 음원 있음{% endif %}</option>
+        <option value="{{ n }}" {% if n == sel_day %}selected{% endif %}>Day {{ n }}</option>
         {% endfor %}
       </select>
       <noscript><button type="submit" class="btn-outline">이동</button></noscript>
     </form>
-    <div style="font-weight:700;margin-bottom:10px;">Day {{ sel_day }}</div>
-
-    {% for stage in stages_with_audio %}
-      <div style="margin-bottom:14px;">
-        <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:6px;">{{ stage_labels[stage] }} 음원</div>
-        {% if audio_info.get(stage) %}
-          <audio controls src="/lesson-audio/{{ lid }}?stage={{ stage }}" style="width:100%;margin-bottom:6px;"></audio>
-          <div class="empty" style="margin-bottom:6px;">현재 파일: {{ audio_info[stage] }} (학생이 저장할 때도 이 이름이에요)</div>
-        {% else %}
-          <p class="empty" style="margin-bottom:6px;">아직 업로드된 음원이 없어요. 없으면 학생 화면에 "준비 중"으로 보여요.</p>
-        {% endif %}
-        <form method="post" action="/admin/lesson-audio" enctype="multipart/form-data" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <input type="hidden" name="lesson_id" value="{{ lid }}">
-          <input type="hidden" name="stage" value="{{ stage }}">
-          <input type="file" name="file" accept="audio/*" required>
-          <button type="submit" class="btn-outline">{{ '교체 업로드' if audio_info.get(stage) else '음원 업로드' }}</button>
-        </form>
-      </div>
-    {% endfor %}
-
-    {% for stage in ['preview', 'review'] %}
-      <div style="margin-bottom:10px;">
-        <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:6px;">{{ stage_labels[stage] }} 정답 스크립트 (학생이 "정답 보기"로 확인해요)</div>
-        <form method="post" action="/admin/answer-script">
-          <input type="hidden" name="lesson_id" value="{{ lid }}">
-          <input type="hidden" name="stage" value="{{ stage }}">
-          <textarea name="text" placeholder="정답 스크립트를 그대로 입력해주세요." style="min-height:70px;">{{ answers.get(stage, '') }}</textarea>
-          <button type="submit" class="btn-outline" style="margin-top:6px;">정답 스크립트 저장</button>
-        </form>
-      </div>
-    {% endfor %}
   </div>
 
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
@@ -146,11 +112,17 @@
       시작일
       <input type="date" name="start_date" value="{{ sv.row.start_date }}" style="padding:6px;border:1px solid var(--line);border-radius:8px;font-family:inherit;">
       <button type="submit" class="btn-outline copy-btn">변경</button>
-      <span>· 오늘은 {% if sv.today_day >= 1 %}<strong>Day {{ sv.today_day }}</strong>{% else %}시작 전{% endif %}</span>
+      <span>· {% if sv.today_day < 1 %}시작 전{% elif sv.rest %}오늘은 주말(쉬는 날)이에요{% else %}오늘은 <strong>Day {{ sv.today_day }}</strong>{% endif %}</span>
     </form>
+    <div style="margin:4px 0 8px;font-size:0.88rem;">
+      <a class="btn btn-outline" style="text-decoration:none;display:inline-block;" href="/admin/students/{{ sv.row.id }}/plan">📅 진도표 편집{% if sv.plan_count %} ({{ sv.plan_count }}일 입력됨){% endif %}</a>
+      {% if sv.today_day >= 1 and not sv.rest %}
+        <span class="empty">오늘 음원: {% if sv.today_audios %}{{ sv.today_audios|join(' + ') }}{% else %}배정 안 됨{% endif %}</span>
+      {% endif %}
+    </div>
     <div class="empty" style="margin-bottom:6px;">녹음을 제출한 Day: {% if sv.rec_days %}{% for n in sv.rec_days %}Day {{ n }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}없음{% endif %}</div>
 
-    <div style="font-weight:700;margin:12px 0 4px;">Day {{ sel_day }}</div>
+    <div style="font-weight:700;margin:12px 0 4px;">Day {{ sel_day }} · {{ sv.day_date }}{% if sv.day_audios %} · {{ sv.day_audios|join(" + ") }}{% endif %}</div>
     {% set st = sv.state %}
     {% set done = st.get('done', {}) %}
     <div class="stage-pills">

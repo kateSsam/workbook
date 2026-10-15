@@ -64,6 +64,15 @@ def init_db():
             UNIQUE(lesson_id, stage)
         );
 
+        CREATE TABLE IF NOT EXISTS plan_slots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            student_id INTEGER NOT NULL,
+            slot INTEGER NOT NULL,
+            audios_json TEXT NOT NULL DEFAULT '[]',
+            UNIQUE(student_id, slot),
+            FOREIGN KEY(student_id) REFERENCES students(id) ON DELETE CASCADE
+        );
+
         CREATE TABLE IF NOT EXISTS lesson_audio_meta (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             lesson_id TEXT NOT NULL,
@@ -290,6 +299,14 @@ def export_all():
     ]
     lesson_scripts = [dict(r) for r in conn.execute("SELECT lesson_id, stage, script_text, updated_at FROM lesson_script").fetchall()]
     lesson_audio_meta = [dict(r) for r in conn.execute("SELECT lesson_id, stage, original_filename, updated_at FROM lesson_audio_meta").fetchall()]
+    plans = [
+        dict(r) for r in conn.execute(
+            """
+            SELECT s.token as token, p.slot as slot, p.audios_json as audios_json
+            FROM plan_slots p JOIN students s ON s.id = p.student_id
+            """
+        ).fetchall()
+    ]
     conn.close()
     return {
         "students": students,
@@ -298,6 +315,7 @@ def export_all():
         "recordings": recordings,
         "lesson_scripts": lesson_scripts,
         "lesson_audio_meta": lesson_audio_meta,
+        "plans": plans,
     }
 
 
@@ -413,4 +431,51 @@ def set_script(lesson_id: str, stage: str, text: str):
         (lesson_id, stage, text, now_iso()),
     )
     conn.commit()
+    conn.close()
+
+
+# ---------- 학생별 진도표 (몇 번째 수업일에 어떤 음원을 연습할지) ----------
+
+def get_plan(student_id: int) -> dict:
+    """{슬롯번호: [음원 파일명, ...]}"""
+    conn = get_conn()
+    rows = conn.execute("SELECT slot, audios_json FROM plan_slots WHERE student_id = ?", (student_id,)).fetchall()
+    conn.close()
+    plan = {}
+    for r in rows:
+        try:
+            files = [f for f in json.loads(r["audios_json"]) if isinstance(f, str) and f]
+        except (TypeError, ValueError):
+            files = []
+        if files:
+            plan[r["slot"]] = files
+    return plan
+
+
+def set_plan(student_id: int, plan: dict):
+    """진도표 전체를 교체해서 저장."""
+    conn = get_conn()
+    conn.execute("DELETE FROM plan_slots WHERE student_id = ?", (student_id,))
+    for slot, files in plan.items():
+        if files:
+            conn.execute(
+                "INSERT INTO plan_slots (student_id, slot, audios_json) VALUES (?, ?, ?)",
+                (student_id, int(slot), json.dumps(list(files), ensure_ascii=False)),
+            )
+    conn.commit()
+    conn.close()
+
+
+def restore_plan_row(token: str, slot: int, audios_json: str):
+    conn = get_conn()
+    sid = _student_id_by_token(conn, token)
+    if sid:
+        conn.execute(
+            """
+            INSERT INTO plan_slots (student_id, slot, audios_json) VALUES (?, ?, ?)
+            ON CONFLICT(student_id, slot) DO UPDATE SET audios_json = excluded.audios_json
+            """,
+            (sid, int(slot), audios_json),
+        )
+        conn.commit()
     conn.close()

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>진도표 — 관리자</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@700&display=swap" rel="stylesheet">
+<style>
+  :root { --paper:#FBF8F3; --paper-raised:#FFFFFF; --ink:#24211D; --ink-soft:#5B564C; --line:#DDD5C7; --teal:#1C5B57; --teal-soft:#E4EFEE; --coral:#D9613F; --gold:#B98B34; --gold-soft:#F6ECD9; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:'Noto Sans KR',sans-serif; line-height:1.6; }
+  .wrap { max-width:920px; margin:0 auto; padding:32px 20px 80px; }
+  h1 { font-family:'Noto Serif KR',serif; font-size:1.5rem; margin:0 0 6px; }
+  .sub { color:var(--ink-soft); margin-bottom:28px; }
+  .panel { background:var(--paper-raised); border:1px solid var(--line); border-radius:14px; padding:22px; margin-bottom:22px; }
+  .add-form { display:flex; gap:10px; flex-wrap:wrap; }
+  .add-form input[type=text] { flex:1; min-width:200px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-family:inherit; }
+  button, .btn { font-family:inherit; font-size:0.88rem; font-weight:700; padding:9px 16px; border-radius:999px; border:1px solid transparent; cursor:pointer; }
+  .btn-primary { background:var(--teal); color:#fff; }
+  .btn-outline { background:transparent; border-color:var(--line); color:var(--ink); }
+  .btn-danger { background:transparent; border-color:var(--coral); color:var(--coral); }
+  .student-card { border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin-bottom:14px; background:var(--paper-raised); }
+  .student-head { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px; }
+  .student-head .name { font-weight:700; font-size:1.05rem; }
+  .link-box { font-size:0.82rem; color:var(--ink-soft); word-break:break-all; }
+  .link-box a { color:var(--teal); }
+  .stage-pills { display:flex; gap:6px; margin:10px 0; }
+  .pill { font-size:0.74rem; padding:3px 9px; border-radius:999px; background:var(--teal-soft); color:var(--ink-soft); }
+  .pill.done { background:var(--teal); color:#fff; }
+  .recordings { margin-top:10px; }
+  .recordings audio { width:100%; margin:4px 0 10px; }
+  .fb-form textarea, textarea { width:100%; min-height:60px; padding:10px; border:1px solid var(--line); border-radius:8px; font-family:inherit; margin-bottom:8px; background:var(--paper-raised); color:var(--ink); }
+  .empty { color:var(--ink-soft); font-size:0.9rem; }
+  .note-box { background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:0.9rem; color:var(--ink); white-space:pre-wrap; }
+  .copy-btn { font-size:0.75rem; padding:3px 9px; }
+  .topnav { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:0 0 22px; }
+  .topnav a { text-decoration:none; font-weight:700; font-size:0.9rem; padding:8px 16px; border-radius:999px; border:1px solid var(--line); color:var(--ink); background:var(--paper-raised); }
+  .topnav a.on { background:var(--teal); color:#fff; border-color:var(--teal); }
+  .topnav .out { margin-left:auto; font-weight:500; color:var(--ink-soft); }
+  .week { border:1px solid var(--line); border-radius:12px; margin-bottom:12px; background:var(--paper-raised); }
+  .week > summary { cursor:pointer; padding:12px 16px; font-weight:700; list-style:none; }
+  .week .body { padding:4px 16px 14px; }
+  .slot { display:grid; grid-template-columns:110px 1fr 1fr; gap:8px; align-items:center; margin-bottom:8px; }
+  .slot .lab { font-size:0.85rem; color:var(--ink-soft); }
+  .slot select, .quick select { padding:8px; border:1px solid var(--line); border-radius:8px; font-family:inherit; background:var(--paper-raised); color:var(--ink); min-width:0; width:100%; }
+  .quick { display:grid; grid-template-columns:1fr 1fr auto; gap:8px; align-items:center; background:var(--gold-soft); border-radius:10px; padding:10px; margin:8px 0 12px; }
+  @media (max-width:640px){ .slot { grid-template-columns:1fr; } .quick { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  {% include "_nav.html" %}
+  <p><a href="/admin" style="color:var(--teal);">← 학생 관리로</a></p>
+  <h1>{{ student.name }} 학생 진도표</h1>
+  <p class="sub">월~금 수업일마다 연습할 음원을 정해요. 주말은 쉬어요. 시작일은 <strong>{{ student.start_date }}</strong>이고, {% if today_day >= 1 %}오늘까지 Day {{ today_day }}가 열렸어요.{% else %}아직 시작 전이에요.{% endif %} 시작일을 월요일로 맞추면 한 주가 월~금에 딱 맞아요.</p>
+  {% if saved %}<div class="panel" style="background:var(--teal-soft);border-color:var(--teal);padding:12px 18px;">저장됐어요 ✓</div>{% endif %}
+  {% if not library %}<div class="panel">보관함에 음원이 없어요. 먼저 <a href="/admin/library">음원 보관함</a>에 음원을 올려주세요.</div>{% endif %}
+
+  {% if others %}
+  <div class="panel">
+    <form method="post" action="/admin/students/{{ student.id }}/plan/copy" onsubmit="return confirm('지금 진도표가 다른 학생 것으로 바뀌어요. 계속할까요?')" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <span style="font-size:0.9rem;">다른 학생 진도표 그대로 가져오기</span>
+      <select name="source_id" style="padding:8px;border:1px solid var(--line);border-radius:8px;font-family:inherit;">
+        {% for o in others %}<option value="{{ o.id }}">{{ o.name }}</option>{% endfor %}
+      </select>
+      <button type="submit" class="btn-outline">가져오기</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <form method="post" action="/admin/students/{{ student.id }}/plan" id="planForm">
+    {% for w in weeks %}
+    <details class="week" {% if w.filled or loop.index <= 2 %}open{% endif %} data-week="{{ w.no }}">
+      <summary>{{ w.no }}주차 ({{ w.slots[0].label }} ~ {{ w.slots[4].label }}){% if w.filled %} ✓{% endif %}</summary>
+      <div class="body">
+        <div class="quick">
+          <select class="qa"><option value="">음원 1 선택</option>{% for f in library %}<option value="{{ f }}">{{ f }}</option>{% endfor %}</select>
+          <select class="qb"><option value="">음원 2 선택</option>{% for f in library %}<option value="{{ f }}">{{ f }}</option>{% endfor %}</select>
+          <button type="button" class="btn-outline fill-pattern">1/2/1/2/1+2 로 채우기</button>
+        </div>
+        {% for s in w.slots %}
+        <div class="slot">
+          <span class="lab">Day {{ s.n }} · {{ s.label }}</span>
+          <select name="s{{ s.n }}_a" data-slot="{{ s.n }}" data-part="a">
+            <option value="">(음원 없음)</option>
+            {% for f in library %}<option value="{{ f }}" {% if f == s.a %}selected{% endif %}>{{ f }}</option>{% endfor %}
+            {% if s.a and s.a not in library %}<option value="{{ s.a }}" selected>{{ s.a }} (보관함에 없음)</option>{% endif %}
+          </select>
+          <select name="s{{ s.n }}_b" data-slot="{{ s.n }}" data-part="b">
+            <option value="">(추가 음원 없음)</option>
+            {% for f in library %}<option value="{{ f }}" {% if f == s.b %}selected{% endif %}>{{ f }}</option>{% endfor %}
+            {% if s.b and s.b not in library %}<option value="{{ s.b }}" selected>{{ s.b }} (보관함에 없음)</option>{% endif %}
+          </select>
+        </div>
+        {% endfor %}
+        {% if w.no > 1 %}<button type="button" class="btn-outline copy-prev" style="margin-top:4px;">이전 주와 같게 채우기</button>{% endif %}
+      </div>
+    </details>
+    {% endfor %}
+    <div style="position:sticky;bottom:0;background:var(--paper);padding:12px 0;">
+      <button type="submit" class="btn-primary" style="padding:12px 28px;">진도표 저장</button>
+    </div>
+  </form>
+</div>
+<script>
+  function setSlot(n, a, b){
+    const sa = document.querySelector(`select[data-slot="${n}"][data-part="a"]`);
+    const sb = document.querySelector(`select[data-slot="${n}"][data-part="b"]`);
+    if (sa) sa.value = a || '';
+    if (sb) sb.value = b || '';
+  }
+  function getSlot(n){
+    const sa = document.querySelector(`select[data-slot="${n}"][data-part="a"]`);
+    const sb = document.querySelector(`select[data-slot="${n}"][data-part="b"]`);
+    return [sa ? sa.value : '', sb ? sb.value : ''];
+  }
+  document.querySelectorAll('.week').forEach(week => {
+    const w = parseInt(week.dataset.week, 10);
+    const base = (w - 1) * 5;
+    const fill = week.querySelector('.fill-pattern');
+    if (fill) fill.addEventListener('click', () => {
+      const a = week.querySelector('.qa').value, b = week.querySelector('.qb').value;
+      if (!a || !b) { alert('음원 1과 음원 2를 먼저 골라주세요.'); return; }
+      setSlot(base + 1, a, ''); setSlot(base + 2, b, ''); setSlot(base + 3, a, '');
+      setSlot(base + 4, b, ''); setSlot(base + 5, a, b);
+    });
+    const cp = week.querySelector('.copy-prev');
+    if (cp) cp.addEventListener('click', () => {
+      for (let i = 1; i <= 5; i++) { const [a, b] = getSlot(base - 5 + i); setSlot(base + i, a, b); }
+    });
+  });
+</script>
+</body>
+</html>
