@@ -68,6 +68,17 @@
     </form>
   </div>
 
+  <div class="panel">
+    <form method="post" action="/admin/rollover" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:0.9rem;">
+      <strong>⏰ 새 Day가 열리는 시각</strong>
+      <select name="hour" style="padding:8px;border:1px solid var(--line);border-radius:8px;font-family:inherit;">
+        {% for h in range(0, 13) %}<option value="{{ h }}" {% if h == rollover_hour %}selected{% endif %}>{% if h == 0 %}자정(0시){% else %}새벽 {{ h }}시{% endif %}</option>{% endfor %}
+      </select>
+      <button type="submit" class="btn-outline copy-btn">저장</button>
+      <span class="empty">그 시각 전까지는 전날 Day가 계속 열려 있어요.</span>
+    </form>
+  </div>
+
   {% set stage_labels = {'train': '훈련', 'preview': '예습', 'review': '복습'} %}
   <div class="panel">
     <h3 style="margin:0 0 8px;font-family:'Noto Serif KR',serif;font-size:1.05rem;">음원과 진도표</h3>

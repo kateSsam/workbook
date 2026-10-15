@@ -73,6 +73,11 @@ def init_db():
             FOREIGN KEY(student_id) REFERENCES students(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS lesson_audio_meta (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             lesson_id TEXT NOT NULL,
@@ -101,8 +106,40 @@ def init_db():
 KST = timezone(timedelta(hours=9))
 
 
+DEFAULT_ROLLOVER_HOUR = 4
+
+
+def get_setting(key: str, default: str = "") -> str:
+    try:
+        conn = get_conn()
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        conn.close()
+        return row["value"] if row else default
+    except sqlite3.Error:
+        return default
+
+
+def set_setting(key: str, value: str):
+    conn = get_conn()
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, value),
+    )
+    conn.commit()
+    conn.close()
+
+
+def rollover_hour() -> int:
+    v = get_setting("rollover_hour", str(DEFAULT_ROLLOVER_HOUR))
+    try:
+        return max(0, min(12, int(v)))
+    except ValueError:
+        return DEFAULT_ROLLOVER_HOUR
+
+
 def kst_today() -> date:
-    return datetime.now(KST).date()
+    """진도가 바뀌는 시각(기본 새벽 4시) 기준의 '오늘' 날짜."""
+    return (datetime.now(KST) - timedelta(hours=rollover_hour())).date()
 
 
 def now_iso():
@@ -307,8 +344,10 @@ def export_all():
             """
         ).fetchall()
     ]
+    settings = [dict(r) for r in conn.execute("SELECT key, value FROM settings").fetchall()]
     conn.close()
     return {
+        "settings": settings,
         "students": students,
         "progress": progress,
         "feedback": feedback,

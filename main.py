@@ -430,6 +430,7 @@ def admin_home(request: Request, key: Optional[str] = None, day: Optional[int] =
             "students": students_view,
             "today": today.isoformat(),
             "library_count": len(list_library()),
+            "rollover_hour": db.rollover_hour(),
         },
     )
 
@@ -623,6 +624,15 @@ def admin_set_start_date(student_id: int, request: Request, key: Optional[str] =
     return RedirectResponse(url=f"/admin#card-{student_id}", status_code=303)
 
 
+@app.post("/admin/rollover")
+def admin_set_rollover(request: Request, key: Optional[str] = Form(None), hour: int = Form(...)):
+    check_admin(request, key)
+    if not 0 <= hour <= 12:
+        raise HTTPException(status_code=400, detail="0~12 사이 시각을 골라 주세요.")
+    db.set_setting("rollover_hour", str(hour))
+    return RedirectResponse(url="/admin", status_code=303)
+
+
 @app.post("/admin/students/{student_id}/delete")
 def admin_delete_student(student_id: int, request: Request, key: Optional[str] = Form(None)):
     check_admin(request, key)
@@ -706,6 +716,9 @@ async def admin_restore(request: Request, key: Optional[str] = Form(None), file:
                     dest = os.path.join(AUDIO_DIR, os.path.basename(name))
                     with zf.open(name) as src, open(dest, "wb") as out:
                         out.write(src.read())
+
+            for st in data.get("settings", []):
+                db.set_setting(st["key"], st["value"])
 
             for pl in data.get("plans", []):
                 db.restore_plan_row(pl["token"], pl["slot"], pl["audios_json"])
