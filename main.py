@@ -1,9 +1,15 @@
+import asyncio
 import glob
+import hashlib
+import hmac
 import io
 import json
 import mimetypes
 import os
 import shutil
+import time
+import urllib.parse
+import urllib.request
 import uuid
 import zipfile
 from datetime import datetime, timezone, date
@@ -82,9 +88,57 @@ def find_lesson_audio(lesson_id: str, stage: str) -> Optional[str]:
 STAGES_WITH_AUDIO = ["preview", "review"]
 
 
-def check_admin(key: Optional[str]):
-    if not key or key != ADMIN_KEY:
-        raise HTTPException(status_code=403, detail="관리자 키가 올바르지 않습니다.")
+# ---- 관리자 로그인 (주소에 열쇠가 남지 않도록 브라우저 쿠키로 로그인 유지) ----
+SESSION_COOKIE = "kate_admin"
+SESSION_DAYS = 14
+
+
+def _sign(ts: str) -> str:
+    return hmac.new(ADMIN_KEY.encode(), f"admin:{ts}".encode(), hashlib.sha256).hexdigest()
+
+
+def make_session() -> str:
+    ts = str(int(time.time()))
+    return f"{ts}.{_sign(ts)}"
+
+
+def key_ok(key: Optional[str]) -> bool:
+    return bool(key) and hmac.compare_digest(key.encode(), ADMIN_KEY.encode())
+
+
+def is_admin(request: Request) -> bool:
+    raw = request.cookies.get(SESSION_COOKIE, "")
+    if "." not in raw:
+        return False
+    ts, sig = raw.split(".", 1)
+    if not ts.isdigit() or not hmac.compare_digest(sig, _sign(ts)):
+        return False
+    return time.time() - int(ts) < SESSION_DAYS * 86400
+
+
+def check_admin(request: Request, key: Optional[str] = None):
+    if is_admin(request) or key_ok(key):
+        return
+    raise HTTPException(status_code=403, detail="관리자 로그인이 필요해요. /admin 에서 다시 로그인해 주세요.")
+
+
+def login_cookie(resp):
+    resp.set_cookie(SESSION_COOKIE, make_session(), max_age=SESSION_DAYS * 86400,
+                    httponly=True, secure=True, samesite="lax", path="/")
+    return resp
+
+
+LOGIN_PAGE = """<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
+<title>관리자 로그인</title></head>
+<body style="font-family:sans-serif;padding:40px;background:#FBF8F3;color:#24211D">
+<h3>Kate English 관리자 센터</h3>
+{msg}
+<form method="post" action="/admin/login" style="display:flex;gap:8px;flex-wrap:wrap">
+<input name="key" type="password" placeholder="관리자 키" autocomplete="current-password" required
+ style="padding:10px;border:1px solid #ccc;border-radius:8px;min-width:220px"/>
+<button type="submit" style="padding:10px 16px;border-radius:8px;border:0;background:#1C5B57;color:#fff;font-weight:700">입장</button>
+</form></body></html>"""
 
 
 # ---------------------------------------------------------------- student ---
@@ -177,10 +231,10 @@ async def api_save_state(request: Request, token: str, lesson: str = "day1"):
 
 
 @app.get("/lesson-audio/{lesson_id}")
-def get_lesson_audio(lesson_id: str, stage: str = "review", t: Optional[str] = None, key: Optional[str] = None):
+def get_lesson_audio(request: Request, lesson_id: str, stage: str = "review", t: Optional[str] = None, key: Optional[str] = None):
     # 관리자(key) 또는 해당 날짜에 접근 가능한 학생(t=링크 토큰)만 들을 수 있어요. (미래 Day 음원은 막힘)
-    if key:
-        check_admin(key)
+    if is_admin(request) or key:
+        check_admin(request, key)
     else:
         student = db.get_student_by_token(t or "")
         if not student or not _allowed_lesson(student, lesson_id):
@@ -216,16 +270,13 @@ async def api_upload_recording(token: str, lesson: str = "day1", file: UploadFil
 
 @app.get("/admin", response_class=HTMLResponse)
 def admin_home(request: Request, key: Optional[str] = None, day: Optional[int] = None):
-    if key != ADMIN_KEY:
-        return HTMLResponse(
-            "<body style='font-family:sans-serif;padding:40px'>"
-            "<h3>관리자 페이지</h3>"
-            "<form method='get' action='/admin'>"
-            "<input name='key' type='password' placeholder='관리자 키' "
-            "style='padding:8px;border:1px solid #ccc;border-radius:6px'/> "
-            "<button type='submit' style='padding:8px 14px'>입장</button>"
-            "</form></body>"
-        )
+    # 예전 방식(주소에 ?key=...)으로 들어와도, 쿠키로 바꿔 주고 깨끗한 주소로 다시 보내요
+    if key:
+        if key_ok(key):
+            return login_cookie(_admin_redirect(lesson_id=lessons.day_lesson_id(day) if day else None))
+        return HTMLResponse(LOGIN_PAGE.format(msg="<p style='color:#D9613F'>관리자 키가 맞지 않아요. 다시 입력해 주세요.</p>"), status_code=401)
+    if not is_admin(request):
+        return HTMLResponse(LOGIN_PAGE.format(msg=""))
 
     sel_day = day if day and 1 <= day <= lessons.MAX_DAYS else 1
     lid = lessons.day_lesson_id(sel_day)
@@ -264,7 +315,8 @@ def admin_home(request: Request, key: Optional[str] = None, day: Optional[int] =
         "admin.html",
         {
             "request": request,
-            "key": key,
+            "key": "",
+            "active_tab": "students",
             "students": students_view,
             "sel_day": sel_day,
             "lid": lid,
@@ -278,20 +330,20 @@ def admin_home(request: Request, key: Optional[str] = None, day: Optional[int] =
     )
 
 
-def _admin_redirect(key: str, lesson_id: str = None):
+def _admin_redirect(key: str = None, lesson_id: str = None):
     n = lessons.parse_day(lesson_id) if lesson_id else None
-    suffix = f"&day={n}" if n else ""
-    return RedirectResponse(url=f"/admin?key={key}{suffix}", status_code=303)
+    suffix = f"?day={n}" if n else ""
+    return RedirectResponse(url=f"/admin{suffix}", status_code=303)
 
 
 @app.post("/admin/lesson-audio")
 async def admin_upload_lesson_audio(
-    key: str = Form(...),
+    request: Request, key: Optional[str] = Form(None),
     lesson_id: str = Form(...),
     stage: str = Form(...),
     file: UploadFile = File(...),
 ):
-    check_admin(key)
+    check_admin(request, key)
     if lessons.parse_day(lesson_id) is None:
         raise HTTPException(status_code=404, detail="존재하지 않는 Day입니다.")
     if stage not in STAGES_WITH_AUDIO:
@@ -316,12 +368,12 @@ async def admin_upload_lesson_audio(
 
 @app.post("/admin/answer-script")
 def admin_save_answer_script(
-    key: str = Form(...),
+    request: Request, key: Optional[str] = Form(None),
     lesson_id: str = Form(...),
     stage: str = Form(...),
     text: str = Form(""),
 ):
-    check_admin(key)
+    check_admin(request, key)
     if lessons.parse_day(lesson_id) is None:
         raise HTTPException(status_code=404, detail="존재하지 않는 Day입니다.")
     if stage not in ("preview", "review"):
@@ -331,12 +383,12 @@ def admin_save_answer_script(
 
 
 @app.post("/admin/students")
-def admin_add_student(key: str = Form(...), name: str = Form(...), start_date: str = Form("")):
-    check_admin(key)
+def admin_add_student(request: Request, key: Optional[str] = Form(None), name: str = Form(...), start_date: str = Form("")):
+    check_admin(request, key)
     sd = _valid_date(start_date)
     if name.strip():
         db.create_student(name.strip(), sd)
-    return RedirectResponse(url=f"/admin?key={key}", status_code=303)
+    return RedirectResponse(url="/admin", status_code=303)
 
 
 def _valid_date(s: str):
@@ -347,30 +399,30 @@ def _valid_date(s: str):
 
 
 @app.post("/admin/students/{student_id}/start-date")
-def admin_set_start_date(student_id: int, key: str = Form(...), start_date: str = Form(...), day: int = Form(1)):
-    check_admin(key)
+def admin_set_start_date(student_id: int, request: Request, key: Optional[str] = Form(None), start_date: str = Form(...), day: int = Form(1)):
+    check_admin(request, key)
     sd = _valid_date(start_date)
     if not sd:
         raise HTTPException(status_code=400, detail="날짜 형식이 올바르지 않아요.")
     db.set_student_start_date(student_id, sd)
-    return RedirectResponse(url=f"/admin?key={key}&day={day}", status_code=303)
+    return RedirectResponse(url=f"/admin?day={day}", status_code=303)
 
 
 @app.post("/admin/students/{student_id}/delete")
-def admin_delete_student(student_id: int, key: str = Form(...)):
-    check_admin(key)
+def admin_delete_student(student_id: int, request: Request, key: Optional[str] = Form(None)):
+    check_admin(request, key)
     db.delete_student(student_id)
-    return RedirectResponse(url=f"/admin?key={key}", status_code=303)
+    return RedirectResponse(url="/admin", status_code=303)
 
 
 @app.post("/admin/feedback")
 def admin_save_feedback(
-    key: str = Form(...),
+    request: Request, key: Optional[str] = Form(None),
     student_id: int = Form(...),
     lesson_id: str = Form(...),
     text: str = Form(""),
 ):
-    check_admin(key)
+    check_admin(request, key)
     if lessons.parse_day(lesson_id) is None:
         raise HTTPException(status_code=404, detail="존재하지 않는 Day입니다.")
     db.set_feedback(student_id, lesson_id, text)
@@ -378,17 +430,17 @@ def admin_save_feedback(
 
 
 @app.get("/admin/recording/{filename}")
-def admin_get_recording(filename: str, key: Optional[str] = None):
-    check_admin(key)
-    path = os.path.join(UPLOADS_DIR, filename)
+def admin_get_recording(request: Request, filename: str, key: Optional[str] = None):
+    check_admin(request, key)
+    path = os.path.join(UPLOADS_DIR, os.path.basename(filename))
     if not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="파일을 찾을 수 없습니다.")
     return FileResponse(path)
 
 
 @app.get("/admin/backup")
-def admin_backup(key: Optional[str] = None):
-    check_admin(key)
+def admin_backup(request: Request, key: Optional[str] = None):
+    check_admin(request, key)
     data = db.export_all()
 
     buf = io.BytesIO()
@@ -408,8 +460,8 @@ def admin_backup(key: Optional[str] = None):
 
 
 @app.post("/admin/restore")
-async def admin_restore(key: str = Form(...), file: UploadFile = File(...)):
-    check_admin(key)
+async def admin_restore(request: Request, key: Optional[str] = Form(None), file: UploadFile = File(...)):
+    check_admin(request, key)
     content = await file.read()
     buf = io.BytesIO(content)
 
@@ -447,4 +499,68 @@ async def admin_restore(key: str = Form(...), file: UploadFile = File(...)):
     except (zipfile.BadZipFile, KeyError, json.JSONDecodeError) as e:
         raise HTTPException(status_code=400, detail=f"백업 파일을 읽을 수 없어요: {e}")
 
-    return RedirectResponse(url=f"/admin?key={key}", status_code=303)
+    return RedirectResponse(url="/admin", status_code=303)
+
+
+@app.post("/admin/login")
+async def admin_login(key: str = Form(...)):
+    if not key_ok(key):
+        await asyncio.sleep(1.5)  # 마구잡이로 비밀번호를 넣어 보는 걸 느리게 만들어요
+        return HTMLResponse(LOGIN_PAGE.format(msg="<p style='color:#D9613F'>관리자 키가 맞지 않아요. 다시 입력해 주세요.</p>"), status_code=401)
+    return login_cookie(RedirectResponse(url="/admin", status_code=303))
+
+
+@app.get("/admin/logout")
+def admin_logout():
+    resp = RedirectResponse(url="/admin", status_code=303)
+    resp.delete_cookie(SESSION_COOKIE, path="/")
+    return resp
+
+
+# -------------------------------------------------------------- inquiries ---
+# 홈페이지 상담 신청서(구글 설문지 → 구글 시트)의 응답을 관리자 센터에서 보여줘요.
+# 렌더 Environment 에 INQUIRY_URL(구글 앱스 스크립트 웹 앱 주소)과 INQUIRY_TOKEN(비밀 토큰)을 넣어야 작동해요.
+INQUIRY_URL = os.environ.get("INQUIRY_URL", "").strip()
+INQUIRY_TOKEN = os.environ.get("INQUIRY_TOKEN", "").strip()
+_inquiry_cache = {"at": 0.0, "data": None}
+
+
+def fetch_inquiries(force: bool = False):
+    if not INQUIRY_URL or not INQUIRY_TOKEN:
+        return {"error": "setup"}
+    if not force and _inquiry_cache["data"] is not None and time.time() - _inquiry_cache["at"] < 60:
+        return _inquiry_cache["data"]
+    sep = "&" if "?" in INQUIRY_URL else "?"
+    url = f"{INQUIRY_URL}{sep}token={urllib.parse.quote(INQUIRY_TOKEN)}"
+    try:
+        with urllib.request.urlopen(url, timeout=15) as r:
+            payload = json.loads(r.read().decode("utf-8"))
+    except Exception as e:  # 네트워크 문제 등
+        return {"error": f"불러오지 못했어요: {e}"}
+    if payload.get("error"):
+        return {"error": "토큰이 맞지 않아요. 구글 스크립트의 TOKEN 과 렌더의 INQUIRY_TOKEN 이 같은지 확인해 주세요."}
+    headers = payload.get("headers") or []
+    rows = [r for r in (payload.get("rows") or []) if any(str(c).strip() for c in r)]
+    items = []
+    for r in reversed(rows):  # 최신 신청이 위로 (첫 칸은 구글이 넣는 신청 시각)
+        fields = []
+        for h, v in list(zip(headers, r))[1:]:
+            v = str(v).strip()
+            if not v or "개인정보" in h:
+                continue
+            fields.append({"label": h, "value": v})
+        items.append({"time": str(r[0]) if r else "", "fields": fields})
+    data = {"items": items, "count": len(items)}
+    _inquiry_cache.update(at=time.time(), data=data)
+    return data
+
+
+@app.get("/admin/inquiries", response_class=HTMLResponse)
+def admin_inquiries(request: Request, refresh: int = 0):
+    if not is_admin(request):
+        return RedirectResponse(url="/admin", status_code=303)
+    data = fetch_inquiries(force=bool(refresh))
+    return templates.TemplateResponse(
+        "inquiries.html",
+        {"request": request, "active_tab": "inquiries", "data": data},
+    )
