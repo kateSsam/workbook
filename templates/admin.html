@@ -68,10 +68,10 @@
     </form>
   </div>
 
-  {% set stage_labels = {'preview': '예습', 'review': '복습'} %}
+  {% set stage_labels = {'train': '훈련', 'preview': '예습', 'review': '복습'} %}
   <div class="panel">
     <h3 style="margin:0 0 8px;font-family:'Noto Serif KR',serif;font-size:1.05rem;">음원과 진도표</h3>
-    <p class="sub" style="margin-bottom:12px;">① <a href="/admin/library">음원 보관함</a>에 음원을 올려두고(현재 {{ library_count }}개), ② 아래 학생 카드의 <strong>진도표 편집</strong>에서 학생마다 월~금에 어떤 음원을 연습할지 정해요. 주말은 쉬어요.</p>
+    <p class="sub" style="margin-bottom:12px;">① <a href="/admin/library">음원 보관함</a>에 음원을 올려두고(현재 {{ library_count }}개), ② 아래 학생 카드의 <strong>진도표 편집</strong>에서 학생마다 월~금 하루에 연습할 음원을 하나씩 정해요. 주말은 쉬어요.</p>
     <form method="get" action="/admin" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <label style="font-size:0.88rem;color:var(--ink-soft);">아래 카드에서 확인할 Day</label>
       <select name="day" onchange="this.form.submit()" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper-raised);color:var(--ink);">
@@ -126,12 +126,11 @@
     {% set st = sv.state %}
     {% set done = st.get('done', {}) %}
     <div class="stage-pills">
-      <span class="pill {{ 'done' if done.get('preview') }}">예습</span>
-      <span class="pill {{ 'done' if done.get('review') }}">복습</span>
+      <span class="pill {{ 'done' if done.get('train') or done.get('review') }}">훈련</span>
     </div>
 
     {% set my_script = st.get('myScript', {}) %}
-    {% for stage in ['preview', 'review'] %}
+    {% for stage in ['train', 'preview', 'review'] %}
       {% if my_script.get(stage) %}
         <div style="margin-bottom:10px;">
           <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:4px;">{{ stage_labels[stage] }} 때 학생이 적은 내용</div>

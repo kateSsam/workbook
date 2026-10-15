@@ -144,8 +144,7 @@ async function saveState(patch) {
 }
 
 const STAGES = [
-  { key: 'preview', label: '예습' },
-  { key: 'review',  label: '복습' }
+  { key: 'train', label: '훈련' }
 ];
 
 function dividerBars(){
@@ -154,21 +153,9 @@ function dividerBars(){
 }
 
 function renderTracker(){
-  const done = state.done || {};
-  const current = state.currentStage || 0;
+  // 단계가 하나(훈련)뿐이라 단계 버튼은 표시하지 않아요.
   const el = document.getElementById('tracker');
-  el.innerHTML = '';
-  STAGES.forEach((s, i) => {
-    const btn = document.createElement('button');
-    btn.className = 'stage-btn' + (i === current ? ' active' : '') + (done[s.key] ? ' done' : '');
-    const barHeights = [6, 12, 9, 16, 7];
-    btn.innerHTML = `
-      <div class="bars">${barHeights.map(h => `<span style="height:${h}px"></span>`).join('')}</div>
-      <span class="num">STEP ${i+1}</span>
-      <span class="name">${s.label}</span>`;
-    btn.addEventListener('click', () => { saveState({ currentStage: i }); renderTracker(); renderStage(i); });
-    el.appendChild(btn);
-  });
+  if (el) el.style.display = 'none';
 }
 
 function markDone(key){
@@ -185,10 +172,8 @@ function goTo(i){
 
 function renderStage(i){
   const card = document.getElementById('stageCard');
-  const s = STAGES[i];
-  if (s.key === 'preview') card.innerHTML = previewHTML();
-  else if (s.key === 'review') card.innerHTML = reviewHTML();
-  wireStage(s.key);
+  card.innerHTML = trainHTML();
+  wireStage('train');
 }
 
 function esc(s){
@@ -199,7 +184,7 @@ function writingSectionHTML(stage){
   const value = (state.myScript && state.myScript[stage]) || '';
   const audios = LESSON.audios || [];
   const answers = audios
-    .map(a => ({ name: a.name, text: (stage === 'preview' ? a.answer_preview : a.answer_review) || '' }))
+    .map(a => ({ name: a.name, text: a.answer || '' }))
     .filter(x => x.text.trim());
   const answerControls = answers.length
     ? `<div class="row" style="margin-top:10px;">
@@ -249,34 +234,11 @@ function audioBlockHTML(stage){
   `;
 }
 
-function previewHTML(){
-  const goals = LESSON.preview.goals.map(g => `<li><strong>${g.title}</strong> — ${g.desc}</li>`).join('');
-  const checks = LESSON.preview.checklist.map((c, idx) => `
-    <li><input type="checkbox" id="pc${idx}"><label for="pc${idx}">${c}</label></li>
-  `).join('');
-  return `
-    <h2>오늘의 목표</h2>
-    <p class="lead">자기소개를 할 때 문장이 흐려지는 걸 막고, 상대방이 한 번에 알아듣게 말하는 연습을 해요.</p>
-    <ol class="points">${goals}</ol>
-    <div class="divider">${dividerBars()}</div>
-    <h2>훈련 전 체크</h2>
-    <ul class="checklist">${checks}</ul>
-    <div class="divider">${dividerBars()}</div>
-    ${writingSectionHTML('preview')}
-    ${audioBlockHTML('preview')}
-    <p class="lead" style="margin-top:-6px;">이 단계의 녹음은 본인 확인용이에요 (서버에 저장되지 않아요).</p>
-    <div class="footer-nav">
-      <span></span>
-      <button class="btn btn-primary" id="nextFromPreview">복습으로 이동 →</button>
-    </div>
-  `;
-}
-
-function reviewHTML(){
+function trainHTML(){
   const cautionItems = (LESSON.review_caution || []).map(c => `<li>${c}</li>`).join('');
   const caution = cautionItems ? `
     <div class="note-box" style="margin-top:0;">
-      <strong>🎙️ 녹음 전에 확인해주세요</strong>
+      <strong>🎙️ 시작하기 전에 확인해주세요</strong>
       <ul style="margin:8px 0 0;padding-left:1.2em;">${cautionItems}</ul>
     </div>
     <div class="divider">${dividerBars()}</div>
@@ -293,15 +255,15 @@ function reviewHTML(){
   `).join('');
 
   const feedbackBox = TEACHER_FEEDBACK
-    ? `<div class="note-box"><strong>선생님 피드백</strong><br>${TEACHER_FEEDBACK}</div>`
+    ? `<div class="note-box"><strong>선생님 피드백</strong><br>${esc(TEACHER_FEEDBACK)}</div>`
     : `<div class="note-box">아직 선생님 피드백이 없어요. 녹음을 제출하면 곧 확인해주실 거예요.</div>`;
 
   return `
-    <h2>복습</h2>
+    <h2>훈련</h2>
     ${caution}
-    ${writingSectionHTML('review')}
-    ${audioBlockHTML('review')}
-    <p class="lead" style="margin-top:-6px;">이 단계의 녹음은 선생님 서버로 저장돼서, 선생님이 확인하실 수 있어요.</p>
+    ${writingSectionHTML('train')}
+    ${audioBlockHTML('train')}
+    <p class="lead" style="margin-top:-6px;">녹음은 선생님 서버로 저장돼서, 선생님이 확인하실 수 있어요.</p>
     <div class="divider">${dividerBars()}</div>
     <h2>스스로 평가해보기</h2>
     <p class="lead">방금 녹음한 걸 다시 들으며 1~5점으로 체크해보세요.</p>
@@ -309,8 +271,8 @@ function reviewHTML(){
     <div class="divider">${dividerBars()}</div>
     ${feedbackBox}
     <div class="footer-nav">
-      <button class="btn btn-outline" data-goto="0">← 예습</button>
-      <button class="btn btn-primary" id="finishBtn">오늘의 학습 기록 저장하기</button>
+      <span></span>
+      <button class="btn btn-primary" id="finishBtn">오늘의 훈련 기록 저장하기</button>
     </div>
   `;
 }
@@ -445,50 +407,29 @@ function wireWritingBox(stage){
 }
 
 function wireStage(key){
-  document.querySelectorAll('[data-goto]').forEach(b => {
-    b.addEventListener('click', () => goTo(parseInt(b.dataset.goto, 10)));
+  wireWritingBox('train');
+  wireAudioControls('train', { upload: true });
+
+  document.querySelectorAll('.rate-scale').forEach(scale => {
+    const k = scale.dataset.key;
+    scale.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = parseInt(btn.dataset.val, 10);
+        const ratings = Object.assign({}, state.ratings, { [k]: val });
+        saveState({ ratings });
+        scale.querySelectorAll('button').forEach(b => b.classList.toggle('picked', parseInt(b.dataset.val,10) === val));
+      });
+    });
   });
 
-  if (key === 'preview') {
-    const preCheck = state.preCheck || {};
-    LESSON.preview.checklist.forEach((c, idx) => {
-      const cb = document.getElementById('pc' + idx);
-      if (preCheck['pc'+idx]) cb.checked = true;
-      cb.addEventListener('change', () => {
-        const pc = Object.assign({}, state.preCheck, { ['pc'+idx]: cb.checked });
-        saveState({ preCheck: pc });
-      });
-    });
-    wireWritingBox('preview');
-    wireAudioControls('preview', { upload: false });
-    document.getElementById('nextFromPreview').addEventListener('click', () => { markDone('preview'); renderTracker(); goTo(1); });
-  }
-
-  if (key === 'review') {
-    wireWritingBox('review');
-    wireAudioControls('review', { upload: true });
-
-    document.querySelectorAll('.rate-scale').forEach(scale => {
-      const k = scale.dataset.key;
-      scale.querySelectorAll('button').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const val = parseInt(btn.dataset.val, 10);
-          const ratings = Object.assign({}, state.ratings, { [k]: val });
-          saveState({ ratings });
-          scale.querySelectorAll('button').forEach(b => b.classList.toggle('picked', parseInt(b.dataset.val,10) === val));
-        });
-      });
-    });
-
-    document.getElementById('finishBtn').addEventListener('click', () => {
-      markDone('review'); renderTracker();
-      alert('오늘의 학습 기록이 저장됐어요. 수고하셨습니다!');
-    });
-  }
+  document.getElementById('finishBtn').addEventListener('click', () => {
+    markDone('train');
+    alert('오늘의 훈련 기록이 저장됐어요. 수고하셨습니다!');
+  });
 }
 
 renderTracker();
-renderStage(state.currentStage || 0);
+renderStage(0);
 </script>
 </body>
 </html>

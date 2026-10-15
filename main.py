@@ -6,6 +6,7 @@ import io
 import json
 import mimetypes
 import os
+import re
 import shutil
 import time
 import urllib.parse
@@ -130,11 +131,19 @@ def audio_path(name: str) -> Optional[str]:
 def list_library() -> List[str]:
     names = [f for f in os.listdir(AUDIO_DIR)
              if os.path.isfile(os.path.join(AUDIO_DIR, f)) and os.path.splitext(f)[1].lower() in AUDIO_EXTS]
-    return sorted(names, key=lambda s: s.lower())
+    def natural(s):
+        return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", s)]
+    return sorted(names, key=natural)
 
 
 def plan_files(plan: dict, slot: int) -> List[str]:
-    return [f for f in plan.get(slot, []) if audio_path(f)]
+    """그날 연습할 음원. 하루에 하나만 연습하므로 첫 번째 음원만 사용."""
+    return [f for f in plan.get(slot, []) if audio_path(f)][:1]
+
+
+def script_for(filename: str) -> str:
+    """음원의 정답 스크립트 (예전에 예습/복습으로 나눠 저장한 것도 읽어줌)."""
+    return db.get_script("audio:" + filename, "train") or db.get_script("audio:" + filename, "review") or db.get_script("audio:" + filename, "preview")
 
 
 def student_allowed_audio(student, filename: str) -> bool:
@@ -245,8 +254,7 @@ def workbook(request: Request, token: str, day: Optional[int] = None):
         audios.append({
             "url": f"/audio/{urllib.parse.quote(f)}?t={token}",
             "name": f,
-            "answer_preview": db.get_script("audio:" + f, "preview"),
-            "answer_review": db.get_script("audio:" + f, "review"),
+            "answer": script_for(f),
         })
 
     lesson_data = dict(lessons.BASE_LESSON)
@@ -403,8 +411,7 @@ def admin_library(request: Request):
             "name": f,
             "url": "/audio/" + urllib.parse.quote(f),
             "size_mb": round(os.path.getsize(os.path.join(AUDIO_DIR, f)) / 1048576, 1),
-            "answer_preview": db.get_script("audio:" + f, "preview"),
-            "answer_review": db.get_script("audio:" + f, "review"),
+            "answer": script_for(f),
         })
     return templates.TemplateResponse("library.html", {"request": request, "active_tab": "library", "files": files})
 
@@ -432,12 +439,14 @@ def admin_library_delete(request: Request, filename: str = Form(...)):
 
 
 @app.post("/admin/library/script")
-def admin_library_script(request: Request, filename: str = Form(...), preview: str = Form(""), review: str = Form("")):
+def admin_library_script(request: Request, filename: str = Form(...), text: str = Form("")):
     check_admin(request, None)
     if not audio_path(filename):
         raise HTTPException(status_code=404, detail="음원을 찾을 수 없어요.")
-    db.set_script("audio:" + safe_audio_name(filename), "preview", preview)
-    db.set_script("audio:" + safe_audio_name(filename), "review", review)
+    n = safe_audio_name(filename)
+    db.set_script("audio:" + n, "train", text)
+    db.set_script("audio:" + n, "review", "")   # 예전 예습/복습 정답이 남아 있으면 정리
+    db.set_script("audio:" + n, "preview", "")
     return RedirectResponse(url="/admin/library", status_code=303)
 
 
@@ -456,9 +465,8 @@ def _plan_page_data(student):
                 "n": n,
                 "label": day_label(start, n),
                 "a": files[0] if len(files) > 0 else "",
-                "b": files[1] if len(files) > 1 else "",
             })
-        weeks.append({"no": w + 1, "slots": slots, "filled": any(s["a"] or s["b"] for s in slots)})
+        weeks.append({"no": w + 1, "slots": slots, "filled": any(s["a"] for s in slots)})
     return weeks
 
 
@@ -493,13 +501,9 @@ async def admin_plan_save(request: Request, student_id: int):
     form = await request.form()
     plan = {}
     for n in range(1, lessons.MAX_DAYS + 1):
-        files = []
-        for part in ("a", "b"):
-            v = safe_audio_name(str(form.get(f"s{n}_{part}", "")))
-            if v and v not in files:
-                files.append(v)
-        if files:
-            plan[n] = files
+        v = safe_audio_name(str(form.get(f"s{n}_a", "")))
+        if v:
+            plan[n] = [v]
     db.set_plan(student_id, plan)
     return RedirectResponse(url=f"/admin/students/{student_id}/plan?saved=1", status_code=303)
 

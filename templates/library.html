@@ -70,13 +70,11 @@
     </div>
     <audio controls preload="none" src="{{ f.url }}" style="width:100%;"></audio>
     <details style="margin-top:10px;">
-      <summary style="cursor:pointer;font-weight:700;font-size:0.9rem;">정답 스크립트 {% if f.answer_preview or f.answer_review %}(입력됨){% else %}(없음){% endif %}</summary>
+      <summary style="cursor:pointer;font-weight:700;font-size:0.9rem;">정답 스크립트 {% if f.answer %}(입력됨){% else %}(없음){% endif %}</summary>
       <form method="post" action="/admin/library/script" style="margin-top:8px;">
         <input type="hidden" name="filename" value="{{ f.name }}">
-        <div class="empty" style="margin-bottom:4px;">예습 정답 (학생이 "정답 보기"로 확인해요)</div>
-        <textarea name="preview" placeholder="비워두면 정답 보기 버튼이 안 보여요.">{{ f.answer_preview }}</textarea>
-        <div class="empty" style="margin-bottom:4px;">복습 정답</div>
-        <textarea name="review" placeholder="비워두면 정답 보기 버튼이 안 보여요.">{{ f.answer_review }}</textarea>
+        <div class="empty" style="margin-bottom:4px;">학생이 "정답 보기"로 확인해요. 비워두면 정답 보기 버튼이 안 보여요.</div>
+        <textarea name="text" placeholder="정답 스크립트를 그대로 입력해주세요.">{{ f.answer }}</textarea>
         <button type="submit" class="btn-outline">정답 저장</button>
       </form>
     </details>
