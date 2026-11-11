@@ -80,11 +80,11 @@
       <audio controls preload="none" src="{{ f.url }}" style="width:100%;"></audio>
       <details style="margin-top:10px;">
         <summary style="cursor:pointer;font-weight:700;font-size:0.9rem;">정답 스크립트 {% if f.answer %}(입력됨){% else %}(없음){% endif %}</summary>
-        <form method="post" action="/admin/library/script" style="margin-top:8px;">
+        <form class="script-form" method="post" action="/admin/library/script" style="margin-top:8px;">
           <input type="hidden" name="filename" value="{{ f.name }}">
           <div class="empty" style="margin-bottom:4px;">학생이 "정답 보기"로 확인해요. 비워두면 정답 보기 버튼이 안 보여요.</div>
           <textarea name="text" placeholder="정답 스크립트를 그대로 입력해주세요.">{{ f.answer }}</textarea>
-          <button type="submit" class="btn-outline">정답 저장</button>
+          <button type="submit" class="btn-outline">정답 저장</button> <span class="save-msg empty" style="margin-left:8px;"></span>
         </form>
       </details>
       <details style="margin-top:8px;">
@@ -103,6 +103,25 @@
   {% endfor %}
 </div>
 <script>
+  document.querySelectorAll('.script-form').forEach(f => {
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const msg = f.querySelector('.save-msg');
+      const btn = f.querySelector('button[type=submit]');
+      btn.disabled = true; msg.textContent = '저장 중…';
+      try {
+        const r = await fetch(f.action, { method: 'POST', body: new FormData(f), headers: { 'X-Requested-With': 'fetch' } });
+        if (!r.ok) throw new Error();
+        const j = await r.json();
+        msg.textContent = '✓ 저장됐어요';
+        const sm = f.closest('details').querySelector('summary');
+        sm.textContent = '정답 스크립트 ' + (j.has_text ? '(입력됨)' : '(없음)');
+        setTimeout(() => { msg.textContent = ''; }, 2500);
+      } catch (err) {
+        msg.textContent = '저장에 실패했어요. 다시 눌러 주세요.';
+      } finally { btn.disabled = false; }
+    });
+  });
   const li = document.getElementById('libSearch');
   if (li) li.addEventListener('input', () => {
     const q = li.value.trim().toLowerCase();

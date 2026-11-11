@@ -508,6 +508,7 @@ def admin_library_delete(request: Request, filename: str = Form(...)):
 
 @app.post("/admin/library/script")
 def admin_library_script(request: Request, filename: str = Form(...), text: str = Form("")):
+    ajax = request.headers.get("x-requested-with") == "fetch"
     check_admin(request, None)
     if not audio_path(filename):
         raise HTTPException(status_code=404, detail="음원을 찾을 수 없어요.")
@@ -515,6 +516,8 @@ def admin_library_script(request: Request, filename: str = Form(...), text: str 
     db.set_script("audio:" + n, "train", text)
     db.set_script("audio:" + n, "review", "")   # 예전 예습/복습 정답이 남아 있으면 정리
     db.set_script("audio:" + n, "preview", "")
+    if ajax:
+        return JSONResponse({"ok": True, "has_text": bool(text.strip())})
     return RedirectResponse(url="/admin/library", status_code=303)
 
 
@@ -665,7 +668,7 @@ def admin_get_recording(request: Request, filename: str, key: Optional[str] = No
 
 
 @app.get("/admin/backup")
-def admin_backup(request: Request, key: Optional[str] = None):
+def admin_backup(request: Request, key: Optional[str] = None, audio: int = 1):
     check_admin(request, key)
     data = db.export_all()
 
@@ -676,12 +679,14 @@ def admin_backup(request: Request, key: Optional[str] = None):
             src = os.path.join(UPLOADS_DIR, rec["filename"])
             if os.path.isfile(src):
                 zf.write(src, arcname=f"recordings/{rec['filename']}")
-        for path in glob.glob(os.path.join(AUDIO_DIR, "*")):
-            zf.write(path, arcname=f"audio/{os.path.basename(path)}")
+        if audio:
+            for path in glob.glob(os.path.join(AUDIO_DIR, "*")):
+                zf.write(path, arcname=f"audio/{os.path.basename(path)}")
     buf.seek(0)
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    headers = {"Content-Disposition": f'attachment; filename="workbook_backup_{stamp}.zip"'}
+    label = "backup" if audio else "students_backup"
+    headers = {"Content-Disposition": f'attachment; filename="workbook_{label}_{stamp}.zip"'}
     return StreamingResponse(buf, media_type="application/zip", headers=headers)
 
 

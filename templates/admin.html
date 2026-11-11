@@ -50,7 +50,8 @@
     <h3 style="margin:0 0 8px;font-family:'Noto Serif KR',serif;font-size:1rem;">⚠️ 데이터 백업</h3>
     <p class="sub" style="margin-bottom:14px;">코드를 새로 배포하기 전에는 꼭 백업을 받아두세요. 무료 서버는 재배포할 때 학생 기록이 초기화될 수 있어요.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
-      <a class="btn btn-primary" style="display:inline-block;text-decoration:none;" href="/admin/backup">⬇ 전체 데이터 백업 다운로드</a>
+      <a class="btn btn-primary" style="display:inline-block;text-decoration:none;" href="/admin/backup?audio=0">⬇ 학생 기록·녹음만 백업 (음원 제외)</a>
+      <a class="btn btn-outline" style="display:inline-block;text-decoration:none;" href="/admin/backup">⬇ 음원까지 전체 백업</a>
       <form method="post" action="/admin/restore" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center;">
         <input type="file" name="file" accept=".zip" required>
         <button type="submit" class="btn-outline">백업에서 복원</button>
