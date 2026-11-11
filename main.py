@@ -573,13 +573,16 @@ def admin_plan(request: Request, student_id: int, saved: int = 0):
     if not student:
         raise HTTPException(status_code=404, detail="학생을 찾을 수 없어요.")
     others = [s for s in db.list_students() if s["id"] != student_id]
+    weeks = _plan_page_data(student)
+    first_empty = next((s["n"] for w in weeks for s in w["slots"] if not s["a"]), 1)
     return templates.TemplateResponse(
         "plan.html",
         {
             "request": request,
             "active_tab": "students",
             "student": student,
-            "weeks": _plan_page_data(student),
+            "weeks": weeks,
+            "first_empty": first_empty,
             "library": list_library(),
             "library_groups": _library_groups(),
             "others": others,

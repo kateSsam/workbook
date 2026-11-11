@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ lesson.title }} — 발음/스피치 훈련 워크북</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #FBF8F3; --paper-raised: #FFFFFF; --ink: #24211D; --ink-soft: #5B564C;
+    --line: #DDD5C7; --teal: #1C5B57; --teal-soft: #E4EFEE; --coral: #D9613F;
+    --coral-soft: #FBE7E0; --gold: #B98B34; --gold-soft: #F6ECD9;
+    --shadow: 0 1px 2px rgba(36,33,29,0.06), 0 6px 20px rgba(36,33,29,0.06);
+    --radius: 14px; color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #1B1A17; --paper-raised: #242220; --ink: #EFEAE0; --ink-soft: #B7AF9F;
+      --line: #3A362E; --teal: #4FA79F; --teal-soft: #1E2E2C; --coral: #E98A67;
+      --coral-soft: #362521; --gold: #D4AC5E; --gold-soft: #332B1B;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 6px 24px rgba(0,0,0,0.35); color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:'Noto Sans KR',-apple-system,sans-serif; line-height:1.6; -webkit-font-smoothing:antialiased; }
+  h1,h2,h3 { font-family:'Noto Serif KR',serif; font-weight:700; margin:0; }
+  .shell { max-width:720px; margin:0 auto; padding:28px 20px 80px; }
+  .top { display:flex; justify-content:space-between; align-items:baseline; gap:12px; margin-bottom:22px; flex-wrap:wrap; }
+  .top .who { font-size:0.9rem; color:var(--ink-soft); }
+  .top .who strong { color:var(--ink); font-weight:700; }
+  .top .lesson-tag { font-size:0.82rem; color:var(--teal); background:var(--teal-soft); padding:4px 10px; border-radius:999px; }
+  .lesson-title { font-size:1.5rem; margin-bottom:4px; }
+  .lesson-sub { color:var(--ink-soft); font-size:0.95rem; margin-bottom:24px; }
+  .tracker { display:flex; align-items:stretch; gap:6px; margin-bottom:28px; overflow-x:auto; padding-bottom:4px; }
+  .stage-btn { flex:1 1 0; min-width:110px; background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius); padding:12px 10px; text-align:left; cursor:pointer; font-family:inherit; color:var(--ink-soft); transition:border-color .15s ease, transform .1s ease; }
+  .stage-btn:hover { border-color:var(--teal); }
+  .stage-btn:active { transform:scale(0.98); }
+  .stage-btn.active { border-color:var(--teal); color:var(--ink); box-shadow:var(--shadow); }
+  .stage-btn .bars { display:flex; align-items:flex-end; gap:2px; height:16px; margin-bottom:8px; }
+  .stage-btn .bars span { width:3px; background:var(--line); border-radius:2px; }
+  .stage-btn.active .bars span, .stage-btn.done .bars span { background:var(--teal); }
+  .stage-btn .num { font-size:0.72rem; letter-spacing:0.02em; color:var(--ink-soft); display:block; }
+  .stage-btn .name { font-size:0.92rem; font-weight:700; color:var(--ink); }
+  .stage-btn.done .name::after { content:" ✓"; color:var(--teal); font-weight:400; }
+  .card { background:var(--paper-raised); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:28px 24px; }
+  .card h2 { font-size:1.2rem; margin-bottom:14px; }
+  .card p { margin:0 0 14px; color:var(--ink); }
+  .card .lead { color:var(--ink-soft); font-size:0.95rem; margin-bottom:22px; }
+  .divider { display:flex; align-items:center; gap:3px; height:14px; margin:22px 0; }
+  .divider span { width:2px; background:var(--line); border-radius:2px; }
+  ol.points { padding-left:1.2em; margin:0 0 18px; }
+  ol.points li { margin-bottom:8px; }
+  .checklist { list-style:none; padding:0; margin:0 0 18px; }
+  .checklist li { display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px solid var(--line); }
+  .checklist li:last-child { border-bottom:none; }
+  .checklist input[type="checkbox"] { margin-top:3px; width:17px; height:17px; accent-color:var(--teal); flex-shrink:0; }
+  .practice-sentence { background:var(--teal-soft); border-radius:10px; padding:18px 20px; font-size:1.15rem; font-family:'Noto Serif KR',serif; color:var(--ink); margin-bottom:18px; line-height:1.7; }
+  .btn { display:inline-flex; align-items:center; gap:8px; font-family:inherit; font-size:0.92rem; font-weight:700; padding:11px 18px; border-radius:999px; border:1px solid transparent; cursor:pointer; transition:opacity .15s ease, transform .1s ease; }
+  .btn:active { transform:scale(0.97); }
+  .btn-primary { background:var(--teal); color:#fff; }
+  .btn-primary:hover { opacity:0.9; }
+  .btn-outline { background:transparent; color:var(--ink); border-color:var(--line); }
+  .btn-outline:hover { border-color:var(--teal); color:var(--teal); }
+  .btn-record { background:var(--coral); color:#fff; }
+  .btn-record:hover { opacity:0.9; }
+  .btn-record.recording { animation:pulse 1.2s infinite; }
+  .btn[disabled] { opacity:0.45; cursor:not-allowed; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(217,97,63,0.4);} 50%{box-shadow:0 0 0 8px rgba(217,97,63,0);} }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+  audio { width:100%; margin-top:8px; }
+  textarea { width:100%; padding:14px 16px; border:1px solid var(--line); border-radius:10px; font-family:inherit; font-size:0.98rem; color:var(--ink); background:var(--paper-raised); resize:vertical; }
+  textarea:focus { outline:none; border-color:var(--teal); }
+  .quiz-q { margin-bottom:20px; }
+  .quiz-q .q-text { font-weight:700; margin-bottom:10px; }
+  .quiz-opts { display:flex; flex-direction:column; gap:8px; }
+  .quiz-opt { text-align:left; padding:10px 14px; border-radius:10px; border:1px solid var(--line); background:var(--paper-raised); cursor:pointer; font-family:inherit; font-size:0.95rem; color:var(--ink); }
+  .quiz-opt:hover { border-color:var(--teal); }
+  .quiz-opt.correct { background:var(--teal-soft); border-color:var(--teal); }
+  .quiz-opt.wrong { background:var(--coral-soft); border-color:var(--coral); }
+  .quiz-opt[disabled] { cursor:default; }
+  .quiz-fb { font-size:0.88rem; color:var(--ink-soft); margin-top:6px; }
+  .rate-row { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:12px 0; border-bottom:1px solid var(--line); }
+  .rate-row:last-of-type { border-bottom:none; }
+  .rate-row .label { font-size:0.94rem; }
+  .rate-scale { display:flex; gap:6px; }
+  .rate-scale button { width:32px; height:32px; border-radius:50%; border:1px solid var(--line); background:var(--paper-raised); color:var(--ink-soft); font-size:0.85rem; cursor:pointer; }
+  .rate-scale button.picked { background:var(--gold); border-color:var(--gold); color:#fff; }
+  .note-box { background:var(--gold-soft); border-radius:10px; padding:14px 16px; font-size:0.88rem; color:var(--ink-soft); margin-top:18px; white-space:pre-wrap; }
+  .blank-slot { display:inline-block; min-width:52px; border-bottom:2px solid var(--teal); color:transparent; user-select:none; }
+  .blank-input { border:none; border-bottom:2px solid var(--teal); background:transparent; font:inherit; font-family:'Noto Serif KR',serif; color:var(--ink); text-align:center; padding:2px 4px; margin:0 2px; }
+  .blank-input:focus { outline:none; border-bottom-color:var(--gold); }
+  .blank-input.blank-correct { border-bottom-color:var(--teal); background:var(--teal-soft); }
+  .blank-input.blank-wrong { border-bottom-color:var(--coral); background:var(--coral-soft); }
+  .footer-nav { display:flex; justify-content:space-between; margin-top:26px; }
+  .up-status { font-size:0.82rem; color:var(--ink-soft); }
+  @media (max-width:480px) { .shell{padding:20px 14px 70px;} .card{padding:22px 16px;} .stage-btn{min-width:88px;} }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="top">
+    <div class="who">수강생 <strong>{{ student_name }}</strong>님</div>
+    <div>
+      <span class="lesson-tag">Day {{ day_n }} · {{ day_label }}{% if day_n == today_n and not rest_day %} · 오늘{% endif %}</span>
+      {% if today_n > 1 %}
+      <select id="daySelect" aria-label="다른 날 워크북 보기" style="margin-left:6px;padding:4px 8px;border-radius:8px;border:1px solid var(--line);background:var(--paper-raised);color:var(--ink);font-family:inherit;">
+        {% for d in days %}
+        <option value="{{ d.n }}" {% if d.n == day_n %}selected{% endif %}>Day {{ d.n }} · {{ d.label }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
+    </div>
+  </div>
+  <h1 class="lesson-title">{{ lesson.title }}</h1>
+  {% if rest_day %}<div class="note-box" style="margin:0 0 18px;">오늘은 주말, 쉬는 날이에요 🌿 푹 쉬고, 원하면 아래에서 지난 Day를 다시 복습해보세요.</div>{% endif %}
+  <p class="lesson-sub">{{ lesson.subtitle }}</p>
+  <div class="tracker" id="tracker"></div>
+  <div class="card" id="stageCard"></div>
+</div>
+
+<script>
+const TOKEN = {{ token|tojson }};
+const LESSON_ID = {{ lesson_id|tojson }};
+const LESSON = {{ lesson|tojson }};
+const TEACHER_FEEDBACK = {{ teacher_feedback|tojson }};
+let state = {{ initial_state|tojson }};
+
+const API_BASE = "/api/" + encodeURIComponent(TOKEN);
+const daySel = document.getElementById('daySelect');
+if (daySel) daySel.addEventListener('change', () => { location.href = location.pathname + '?day=' + daySel.value; });
+
+async function saveState(patch) {
+  Object.assign(state, patch);
+  try {
+    const res = await fetch(`${API_BASE}/state?lesson=${encodeURIComponent(LESSON_ID)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch)
+    });
+    if (res.ok) state = await res.json();
+  } catch (e) { /* 네트워크 오류 시 화면은 계속 동작, 다음 저장에서 재시도됨 */ }
+}
+
+const STAGES = [
+  { key: 'train', label: '훈련' }
+];
+
+function dividerBars(){
+  const hs = [4,9,5,13,6,10,4];
+  return hs.map(h => `<span style="height:${h}px"></span>`).join('');
+}
+
+function renderTracker(){
+  // 단계가 하나(훈련)뿐이라 단계 버튼은 표시하지 않아요.
+  const el = document.getElementById('tracker');
+  if (el) el.style.display = 'none';
+}
+
+function markDone(key){
+  const done = Object.assign({}, state.done, { [key]: true });
+  saveState({ done });
+}
+
+function goTo(i){
+  saveState({ currentStage: i });
+  renderTracker();
+  renderStage(i);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function renderStage(i){
+  const card = document.getElementById('stageCard');
+  card.innerHTML = trainHTML();
+  wireStage('train');
+}
+
+function esc(s){
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function writingSectionHTML(stage){
+  const value = (state.myScript && state.myScript[stage]) || '';
+  const audios = LESSON.audios || [];
+  const answers = audios
+    .map(a => ({ name: a.name, text: a.answer || '' }))
+    .filter(x => x.text.trim());
+  const answerControls = answers.length
+    ? `<div class="row" style="margin-top:10px;">
+         <button class="btn btn-outline" id="revealAnswerBtn-${stage}">정답 보기</button>
+       </div>
+       <div id="answerBox-${stage}" style="display:none;margin-top:10px;">
+         ${answers.map(x => `<div class="note-box" style="margin-top:8px;">${answers.length > 1 ? `<strong>${esc(x.name)}</strong><br>` : ''}${esc(x.text)}</div>`).join('')}
+       </div>`
+    : '';
+  return `
+    <h2>내가 들은 내용을 적어보세요</h2>
+    <p class="lead">음원을 들으며 이해한 내용을 자유롭게 타이핑해보세요.</p>
+    <textarea id="myScript-${stage}" style="min-height:130px;" placeholder="여기에 적어보세요...">${esc(value)}</textarea>
+    <p id="scriptSaveStatus-${stage}" class="up-status"></p>
+    ${answerControls}
+    <div class="divider">${dividerBars()}</div>
+  `;
+}
+
+function audioBlockHTML(stage){
+  const audios = LESSON.audios || [];
+  const items = audios.length ? audios.map((a, i) => `
+    <div style="margin-bottom:16px;">
+      ${audios.length > 1 ? `<div style="font-weight:700;margin-bottom:6px;">🎵 음원 ${i+1}</div>` : ''}
+      <audio class="modelAudio" id="modelAudio-${i}" src="${a.url}" preload="none" style="display:none"></audio>
+      <div class="row">
+        <button class="btn btn-outline play-btn" data-i="${i}">🔊 음원 재생</button>
+        <button class="btn btn-outline stop-btn" data-i="${i}" disabled>⏸ 음원 멈추기</button>
+        <a class="btn btn-outline" href="${a.url}" download="${esc(a.name)}">⬇ 음원 파일 저장</a>
+      </div>
+      <div class="row">
+        <button class="btn btn-outline both-btn" data-i="${i}">🎧 이 음원과 동시에 녹음 (실시간 비교용)</button>
+      </div>
+    </div>`).join('') + `
+    <p class="lead" style="margin-top:-6px;">화면이 꺼지거나 창을 나가면 재생이 멈출 수 있어요. 파일을 저장해서 평소 쓰는 음악 앱으로 들으면 화면을 꺼도 계속 들을 수 있어요. 이어폰 없이 스피커로 들으면 "동시에 녹음"에는 음원 소리가 섞여요.</p>
+  ` : `<p class="lead">이 날의 음원은 아직 준비 중이에요.</p>`;
+  return `
+    ${items}
+    <div class="divider">${dividerBars()}</div>
+    <div class="row">
+      <button class="btn btn-record" id="recordBtn">● 내 목소리만 녹음하기</button>
+      <span id="recStatus" class="up-status"></span>
+    </div>
+    <p class="lead" style="margin-top:-6px;">${audios.length ? '음원을 먼저 듣고 나서 이 버튼으로 녹음하면, 학생 목소리만 깨끗하게 녹음돼요. ' : ''}녹음 중에는 화면이 꺼지지 않게 켜둔 채로 진행해주세요 (화면이 꺼지면 녹음도 멈춰요).</p>
+    <div id="recPlayback"></div>
+    <p id="recError" style="color:var(--coral); font-size:0.85rem; display:none;"></p>
+  `;
+}
+
+function trainHTML(){
+  const cautionItems = (LESSON.review_caution || []).map(c => `<li>${c}</li>`).join('');
+  const caution = cautionItems ? `
+    <div class="note-box" style="margin-top:0;">
+      <strong>🎙️ 시작하기 전에 확인해주세요</strong>
+      <ul style="margin:8px 0 0;padding-left:1.2em;">${cautionItems}</ul>
+    </div>
+    <div class="divider">${dividerBars()}</div>
+  ` : '';
+
+  const ratings = state.ratings || {};
+  const rateRows = LESSON.rate_items.map(item => `
+    <div class="rate-row">
+      <span class="label">${item.label}</span>
+      <div class="rate-scale" data-key="${item.key}">
+        ${[1,2,3,4,5].map(n => `<button class="${ratings[item.key]===n?'picked':''}" data-val="${n}">${n}</button>`).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  const feedbackBox = TEACHER_FEEDBACK
+    ? `<div class="note-box"><strong>선생님 피드백</strong><br>${esc(TEACHER_FEEDBACK)}</div>`
+    : `<div class="note-box">아직 선생님 피드백이 없어요. 녹음을 제출하면 곧 확인해주실 거예요.</div>`;
+
+  return `
+    <h2>훈련</h2>
+    ${caution}
+    ${writingSectionHTML('train')}
+    ${audioBlockHTML('train')}
+    <p class="lead" style="margin-top:-6px;">녹음은 선생님 서버로 저장돼서, 선생님이 확인하실 수 있어요.</p>
+    <div class="divider">${dividerBars()}</div>
+    <h2>스스로 평가해보기</h2>
+    <p class="lead">방금 녹음한 걸 다시 들으며 1~5점으로 체크해보세요.</p>
+    ${rateRows}
+    <div class="divider">${dividerBars()}</div>
+    ${feedbackBox}
+    <div class="footer-nav">
+      <span></span>
+      <button class="btn btn-primary" id="finishBtn">오늘의 훈련 기록 저장하기</button>
+    </div>
+  `;
+}
+
+let lastRecordingBlob = null;
+
+function wireAudioControls(stage, { upload }){
+  const audioEls = Array.from(document.querySelectorAll('.modelAudio'));
+
+  function stopAll(){
+    audioEls.forEach(el => { el.pause(); el.currentTime = 0; });
+  }
+  function playModel(i){
+    const el = audioEls[i];
+    if (!el) return;
+    audioEls.forEach((o, j) => { if (j !== i) { o.pause(); o.currentTime = 0; } });
+    el.currentTime = 0;
+    el.play().catch(() => {
+      const st = document.getElementById('recStatus');
+      if (st) st.textContent = '음원 재생이 막혔어요. 버튼을 한 번 더 눌러주세요.';
+    });
+  }
+  function setStopButtons(){
+    document.querySelectorAll('.stop-btn').forEach(btn => {
+      const el = audioEls[parseInt(btn.dataset.i, 10)];
+      btn.disabled = !el || el.paused;
+    });
+  }
+  audioEls.forEach(el => ['play','pause','ended'].forEach(ev => el.addEventListener(ev, setStopButtons)));
+  document.querySelectorAll('.play-btn').forEach(b => b.addEventListener('click', () => playModel(parseInt(b.dataset.i, 10))));
+  document.querySelectorAll('.stop-btn').forEach(b => b.addEventListener('click', () => { const el = audioEls[parseInt(b.dataset.i, 10)]; if (el) { el.pause(); el.currentTime = 0; } }));
+
+  const recordBtn = document.getElementById('recordBtn');
+  const bothBtns = Array.from(document.querySelectorAll('.both-btn'));
+  const recStatus = document.getElementById('recStatus');
+  const recError = document.getElementById('recError');
+  const recPlayback = document.getElementById('recPlayback');
+  let mediaRecorder = null, chunks = [], recording = false;
+
+  async function startRecording(){
+    if (recording) return;
+    if (!navigator.mediaDevices || !window.MediaRecorder) {
+      recError.style.display = 'block';
+      recError.textContent = '이 브라우저에서는 녹음 기능을 사용할 수 없어요.';
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+      });
+      chunks = [];
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: chunks[0] && chunks[0].type ? chunks[0].type : 'audio/webm' });
+        const url = URL.createObjectURL(blob);
+        recPlayback.innerHTML = `<audio controls src="${url}"></audio>`;
+        stream.getTracks().forEach(t => t.stop());
+        if (upload) {
+          lastRecordingBlob = blob;
+          recStatus.textContent = '서버로 업로드하는 중...';
+          try {
+            const fd = new FormData();
+            fd.append('file', blob, 'recording.webm');
+            const res = await fetch(`${API_BASE}/upload?lesson=${encodeURIComponent(LESSON_ID)}`, { method: 'POST', body: fd });
+            if (res.ok) { recStatus.textContent = '업로드 완료! 선생님이 확인하실 수 있어요.'; saveState({ hasRecording: true }); }
+            else { recStatus.textContent = '업로드에 실패했어요. 다시 시도해주세요.'; }
+          } catch (e) { recStatus.textContent = '업로드에 실패했어요. 인터넷 연결을 확인해주세요.'; }
+        } else {
+          recStatus.textContent = '녹음 완료! (이 단계는 본인 확인용이라 서버에는 저장되지 않아요)';
+        }
+      };
+      mediaRecorder.start();
+      recording = true;
+      recordBtn.textContent = '■ 녹음 멈추기';
+      recordBtn.classList.add('recording');
+      bothBtns.forEach(b => { b.disabled = true; });
+      recStatus.textContent = '녹음 중...';
+      recError.style.display = 'none';
+    } catch (err) {
+      recError.style.display = 'block';
+      recError.textContent = '마이크 권한을 허용해주셔야 녹음할 수 있어요.';
+    }
+  }
+
+  function stopRecording(){
+    if (!recording) return;
+    mediaRecorder.stop();
+    recording = false;
+    recordBtn.textContent = '● 내 목소리만 녹음하기';
+    recordBtn.classList.remove('recording');
+    stopAll();
+    bothBtns.forEach(b => { b.disabled = false; b.textContent = '🎧 이 음원과 동시에 녹음 (실시간 비교용)'; });
+  }
+
+  recordBtn.addEventListener('click', () => { recording ? stopRecording() : startRecording(); });
+
+  bothBtns.forEach(btn => btn.addEventListener('click', async () => {
+    if (recording) { stopRecording(); return; }
+    playModel(parseInt(btn.dataset.i, 10)); // 반드시 마이크 권한 대기(await)보다 먼저, 클릭 이벤트 안에서 동기적으로 실행해야 브라우저가 재생을 막지 않음
+    await startRecording();
+    if (recording) { btn.disabled = false; btn.textContent = '■ 재생+녹음 멈추기'; }
+  }));
+}
+
+function wireWritingBox(stage){
+  const revealBtn = document.getElementById('revealAnswerBtn-' + stage);
+  if (revealBtn) revealBtn.addEventListener('click', () => {
+    const box = document.getElementById('answerBox-' + stage);
+    box.style.display = box.style.display === 'none' ? 'block' : 'none';
+  });
+
+  const box = document.getElementById('myScript-' + stage);
+  if (!box) return;
+  const statusEl = document.getElementById('scriptSaveStatus-' + stage);
+  let saveTimer = null;
+  box.addEventListener('input', () => {
+    if (statusEl) statusEl.textContent = '입력 중...';
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      const myScript = Object.assign({}, state.myScript, { [stage]: box.value });
+      await saveState({ myScript });
+      if (statusEl) statusEl.textContent = '저장됐어요.';
+    }, 800);
+  });
+  box.addEventListener('blur', () => {
+    clearTimeout(saveTimer);
+    const myScript = Object.assign({}, state.myScript, { [stage]: box.value });
+    saveState({ myScript });
+    if (statusEl) statusEl.textContent = '저장됐어요.';
+  });
+}
+
+function wireStage(key){
+  wireWritingBox('train');
+  wireAudioControls('train', { upload: true });
+
+  document.querySelectorAll('.rate-scale').forEach(scale => {
+    const k = scale.dataset.key;
+    scale.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const val = parseInt(btn.dataset.val, 10);
+        const ratings = Object.assign({}, state.ratings, { [k]: val });
+        saveState({ ratings });
+        scale.querySelectorAll('button').forEach(b => b.classList.toggle('picked', parseInt(b.dataset.val,10) === val));
+      });
+    });
+  });
+
+  document.getElementById('finishBtn').addEventListener('click', () => {
+    markDone('train');
+    alert('오늘의 훈련 기록이 저장됐어요. 수고하셨습니다!');
+  });
+}
+
+renderTracker();
+renderStage(0);
+</script>
+</body>
+</html>

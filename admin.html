@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>관리자 — 발음/스피치 훈련 워크북</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@700&display=swap" rel="stylesheet">
+<style>
+  :root { --paper:#FBF8F3; --paper-raised:#FFFFFF; --ink:#24211D; --ink-soft:#5B564C; --line:#DDD5C7; --teal:#1C5B57; --teal-soft:#E4EFEE; --coral:#D9613F; --gold:#B98B34; --gold-soft:#F6ECD9; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:'Noto Sans KR',sans-serif; line-height:1.6; }
+  .wrap { max-width:920px; margin:0 auto; padding:32px 20px 80px; }
+  h1 { font-family:'Noto Serif KR',serif; font-size:1.5rem; margin:0 0 6px; }
+  .sub { color:var(--ink-soft); margin-bottom:28px; }
+  .panel { background:var(--paper-raised); border:1px solid var(--line); border-radius:14px; padding:22px; margin-bottom:22px; }
+  .add-form { display:flex; gap:10px; flex-wrap:wrap; }
+  .add-form input[type=text] { flex:1; min-width:200px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font-family:inherit; }
+  button, .btn { font-family:inherit; font-size:0.88rem; font-weight:700; padding:9px 16px; border-radius:999px; border:1px solid transparent; cursor:pointer; }
+  .btn-primary { background:var(--teal); color:#fff; }
+  .btn-outline { background:transparent; border-color:var(--line); color:var(--ink); }
+  .btn-danger { background:transparent; border-color:var(--coral); color:var(--coral); }
+  .student-card { border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin-bottom:14px; background:var(--paper-raised); }
+  .student-head { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px; }
+  .student-head .name { font-weight:700; font-size:1.05rem; }
+  .link-box { font-size:0.82rem; color:var(--ink-soft); word-break:break-all; }
+  .link-box a { color:var(--teal); }
+  .stage-pills { display:flex; gap:6px; margin:10px 0; }
+  .pill { font-size:0.74rem; padding:3px 9px; border-radius:999px; background:var(--teal-soft); color:var(--ink-soft); }
+  .pill.done { background:var(--teal); color:#fff; }
+  .recordings { margin-top:10px; }
+  .recordings audio { width:100%; margin:4px 0 10px; }
+  .fb-form textarea, textarea { width:100%; min-height:60px; padding:10px; border:1px solid var(--line); border-radius:8px; font-family:inherit; margin-bottom:8px; background:var(--paper-raised); color:var(--ink); }
+  .empty { color:var(--ink-soft); font-size:0.9rem; }
+  .note-box { background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:0.9rem; color:var(--ink); white-space:pre-wrap; }
+  .copy-btn { font-size:0.75rem; padding:3px 9px; }
+  .topnav { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:0 0 22px; }
+  .topnav a { text-decoration:none; font-weight:700; font-size:0.9rem; padding:8px 16px; border-radius:999px; border:1px solid var(--line); color:var(--ink); background:var(--paper-raised); }
+  .topnav a.on { background:var(--teal); color:#fff; border-color:var(--teal); }
+  .topnav .out { margin-left:auto; font-weight:500; color:var(--ink-soft); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  {% include "_nav.html" %}
+  <h1>발음/스피치 훈련 워크북 — 관리자</h1>
+  <p class="sub">학생을 등록해서 개별 링크를 발급하고, 진행상황·녹음·피드백을 관리해요.</p>
+
+  <div class="panel" style="background:var(--gold-soft);border-color:var(--gold);">
+    <h3 style="margin:0 0 8px;font-family:'Noto Serif KR',serif;font-size:1rem;">⚠️ 데이터 백업</h3>
+    <p class="sub" style="margin-bottom:14px;">코드를 새로 배포하기 전에는 꼭 백업을 받아두세요. 무료 서버는 재배포할 때 학생 기록이 초기화될 수 있어요.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+      <a class="btn btn-primary" style="display:inline-block;text-decoration:none;" href="/admin/backup?audio=0">⬇ 학생 기록·녹음만 백업 (음원 제외)</a>
+      <a class="btn btn-outline" style="display:inline-block;text-decoration:none;" href="/admin/backup">⬇ 음원까지 전체 백업</a>
+      <form method="post" action="/admin/restore" enctype="multipart/form-data" style="display:flex;gap:8px;align-items:center;">
+        <input type="file" name="file" accept=".zip" required>
+        <button type="submit" class="btn-outline">백업에서 복원</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="panel">
+    <form class="add-form" method="post" action="/admin/students">
+      <input type="text" name="name" placeholder="새 수강생 이름" required>
+      <label style="font-size:0.85rem;color:var(--ink-soft);display:flex;align-items:center;gap:6px;">시작일(Day 1 · 월요일 추천)
+        <input type="date" name="start_date" value="{{ today }}" style="padding:9px;border:1px solid var(--line);border-radius:8px;font-family:inherit;">
+      </label>
+      <button type="submit" class="btn-primary">학생 등록하고 링크 발급</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <form method="post" action="/admin/rollover" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:0.9rem;">
+      <strong>⏰ 새 Day가 열리는 시각</strong>
+      <select name="hour" style="padding:8px;border:1px solid var(--line);border-radius:8px;font-family:inherit;">
+        {% for h in range(0, 13) %}<option value="{{ h }}" {% if h == rollover_hour %}selected{% endif %}>{% if h == 0 %}자정(0시){% else %}새벽 {{ h }}시{% endif %}</option>{% endfor %}
+      </select>
+      <button type="submit" class="btn-outline copy-btn">저장</button>
+      <span class="empty">그 시각 전까지는 전날 Day가 계속 열려 있어요.</span>
+    </form>
+  </div>
+
+  {% set stage_labels = {'train': '훈련', 'preview': '예습', 'review': '복습'} %}
+  <div class="panel">
+    <h3 style="margin:0 0 8px;font-family:'Noto Serif KR',serif;font-size:1.05rem;">음원과 진도표</h3>
+    <p class="sub" style="margin-bottom:12px;">① <a href="/admin/library">음원 보관함</a>에 음원을 올려두고(현재 {{ library_count }}개), ② 아래 학생 카드의 <strong>진도표 편집</strong>에서 학생마다 월~금 하루에 연습할 음원을 하나씩 정해요. 주말은 쉬어요.</p>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+    <h2 style="font-family:'Noto Serif KR',serif;font-size:1.15rem;margin:0;">등록된 학생 ({{ students|length }}명)</h2>
+    <input type="text" id="studentSearch" placeholder="🔍 학생 이름 검색" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;min-width:200px;background:var(--paper-raised);color:var(--ink);">
+  </div>
+
+  {% if not students %}
+    <p class="empty">아직 등록된 학생이 없어요. 위에서 이름을 입력해 첫 학생을 등록해보세요.</p>
+  {% endif %}
+
+  <p id="noSearchResult" class="empty" style="display:none;">검색 결과가 없어요.</p>
+
+  {% for sv in students %}
+  <div class="student-card" id="card-{{ sv.row.id }}" data-name="{{ sv.row.name|lower }}">
+    <div class="student-head">
+      <span class="name">{{ sv.row.name }}{% if sv.new_count %} <span class="pill" style="background:var(--coral);color:#fff;">새 녹음 {{ sv.new_count }}</span>{% endif %}</span>
+      <form method="post" action="/admin/students/{{ sv.row.id }}/delete" onsubmit="return confirm('{{ sv.row.name }} 학생을 삭제할까요? 기록도 함께 삭제됩니다.')">
+        <button type="submit" class="btn-danger">학생 삭제</button>
+      </form>
+    </div>
+    <div class="link-box">
+      링크: <a href="{{ sv.link }}" target="_blank">{{ sv.link }}</a>
+      <button class="btn-outline copy-btn" onclick="navigator.clipboard.writeText(location.origin + '{{ sv.link }}'); this.textContent='복사됨';">복사</button>
+    </div>
+
+    <form method="post" action="/admin/students/{{ sv.row.id }}/start-date" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0;font-size:0.85rem;color:var(--ink-soft);">
+      시작일
+      <input type="date" name="start_date" value="{{ sv.row.start_date }}" style="padding:6px;border:1px solid var(--line);border-radius:8px;font-family:inherit;">
+      <button type="submit" class="btn-outline copy-btn">변경</button>
+      <span>· {% if sv.today_day < 1 %}시작 전{% elif sv.rest %}오늘은 주말(쉬는 날)이에요{% else %}오늘은 <strong>Day {{ sv.today_day }}</strong>{% endif %}</span>
+    </form>
+    <div style="margin:4px 0 8px;font-size:0.88rem;">
+      <a class="btn btn-outline" style="text-decoration:none;display:inline-block;" href="/admin/students/{{ sv.row.id }}/plan">📅 진도표 편집{% if sv.plan_count %} ({{ sv.plan_count }}일 입력됨){% endif %}</a>
+      {% if sv.today_day >= 1 and not sv.rest %}
+        <span class="empty">오늘 음원: {% if sv.today_audios %}{{ sv.today_audios|join(' + ') }}{% else %}배정 안 됨{% endif %}</span>
+      {% endif %}
+    </div>
+
+    <div style="margin:10px 0;">
+      <div style="font-weight:700;font-size:0.9rem;margin-bottom:4px;">🎙️ 최근 녹음</div>
+      {% if sv.recent %}
+        {% for r in sv.recent %}
+          <div class="empty" style="margin-top:6px;">Day {{ r.n }} · {{ r.time }}</div>
+          <audio controls preload="none" src="/admin/recording/{{ r.filename }}" style="width:100%;"></audio>
+        {% endfor %}
+      {% else %}
+        <p class="empty" style="margin:0;">아직 제출된 녹음이 없어요.</p>
+      {% endif %}
+    </div>
+
+    {% if sv.days %}
+    <div style="border-top:1px solid var(--line);margin-top:12px;padding-top:12px;">
+      <label style="font-size:0.88rem;color:var(--ink-soft);">Day별로 보기
+        <select class="day-select" data-card="{{ sv.row.id }}" style="margin-left:6px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;font-family:inherit;background:var(--paper-raised);color:var(--ink);">
+          {% for dd in sv.days %}
+          <option value="{{ dd.n }}" {% if dd.n == sv.selected %}selected{% endif %}>Day {{ dd.n }} · {{ dd.label }}{% if dd.recordings %} 🎙️{% endif %}{% if dd.new %} (새 녹음){% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      {% for dd in sv.days %}
+      <div class="day-panel" data-card="{{ sv.row.id }}" data-day="{{ dd.n }}" style="{% if dd.n != sv.selected %}display:none;{% endif %}margin-top:10px;">
+        <div style="font-weight:700;margin:0 0 4px;">Day {{ dd.n }} · {{ dd.label }}{% if dd.audios %} · {{ dd.audios|join(' + ') }}{% endif %}</div>
+        {% set done = dd.state.get('done', {}) %}
+        <div class="stage-pills">
+          <span class="pill {{ 'done' if done.get('train') or done.get('review') }}">훈련</span>
+        </div>
+
+        {% set my_script = dd.state.get('myScript', {}) %}
+        {% for stage in ['train', 'preview', 'review'] %}
+          {% if my_script.get(stage) %}
+            <div style="margin-bottom:10px;">
+              <div style="font-size:0.85rem;color:var(--ink-soft);margin-bottom:4px;">학생이 적은 내용</div>
+              <div class="note-box" style="margin-top:0;">{{ my_script.get(stage) }}</div>
+            </div>
+          {% endif %}
+        {% endfor %}
+
+        <div class="recordings">
+          {% if dd.recordings %}
+            {% for r in dd.recordings %}
+              <div class="empty">제출 {{ r.time }}</div>
+              <audio controls preload="none" src="/admin/recording/{{ r.filename }}"></audio>
+            {% endfor %}
+          {% else %}
+            <p class="empty">이 Day에 제출된 녹음이 없어요.</p>
+          {% endif %}
+        </div>
+
+        <form class="fb-form" method="post" action="/admin/feedback">
+          <input type="hidden" name="student_id" value="{{ sv.row.id }}">
+          <input type="hidden" name="lesson_id" value="{{ dd.lid }}">
+          <textarea name="text" placeholder="이 학생에게 남길 피드백을 적어주세요">{{ dd.feedback }}</textarea>
+          <button type="submit" class="btn-primary">피드백 저장</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+<script>
+  document.querySelectorAll('.day-select').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const card = sel.dataset.card;
+      document.querySelectorAll('.day-panel[data-card="' + card + '"]').forEach(p => {
+        p.style.display = (p.dataset.day === sel.value) ? '' : 'none';
+      });
+    });
+  });
+  const searchInput = document.getElementById('studentSearch');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      const q = searchInput.value.trim().toLowerCase();
+      const cards = document.querySelectorAll('.student-card');
+      let visibleCount = 0;
+      cards.forEach(card => {
+        const name = card.dataset.name || '';
+        const match = name.includes(q);
+        card.style.display = match ? '' : 'none';
+        if (match) visibleCount++;
+      });
+      const noResult = document.getElementById('noSearchResult');
+      if (noResult) noResult.style.display = (q && visibleCount === 0) ? 'block' : 'none';
+    });
+  }
+</script>
+</body>
+</html>
