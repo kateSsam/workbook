@@ -503,6 +503,22 @@ def admin_library_delete(request: Request, filename: str = Form(...)):
     p = audio_path(filename)
     if p:
         os.remove(p)
+    if request.headers.get("x-requested-with") == "fetch":
+        return JSONResponse({"ok": True, "deleted": [filename]})
+    return RedirectResponse(url="/admin/library", status_code=303)
+
+
+@app.post("/admin/library/delete-many")
+def admin_library_delete_many(request: Request, filenames: List[str] = Form(default=[])):
+    check_admin(request, None)
+    deleted = []
+    for fn in filenames:
+        p = audio_path(fn)
+        if p:
+            os.remove(p)
+            deleted.append(fn)
+    if request.headers.get("x-requested-with") == "fetch":
+        return JSONResponse({"ok": True, "deleted": deleted})
     return RedirectResponse(url="/admin/library", status_code=303)
 
 

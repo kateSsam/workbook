@@ -61,18 +61,26 @@
     <h2 style="font-family:'Noto Serif KR',serif;font-size:1.15rem;margin:0;">보관 중인 음원 ({{ total }}개)</h2>
     <input type="text" id="libSearch" placeholder="🔍 음원 이름 검색" style="padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-family:inherit;min-width:220px;background:var(--paper-raised);color:var(--ink);">
   </div>
+  {% if groups %}
+  <div id="bulkBar" style="position:sticky;top:0;z-index:5;background:var(--paper);padding:10px 0;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:12px;">
+    <label style="font-size:0.9rem;font-weight:700;display:flex;align-items:center;gap:6px;cursor:pointer;"><input type="checkbox" id="selAll"> 전체 선택</label>
+    <button type="button" id="bulkDel" class="btn-danger" disabled>선택한 음원 삭제</button>
+    <span id="selCount" class="empty">선택된 음원 없음</span>
+  </div>
+  {% endif %}
   {% if not groups %}<p class="empty">아직 음원이 없어요.</p>{% endif %}
   <p id="noLibResult" class="empty" style="display:none;">검색 결과가 없어요.</p>
 
   {% for g in groups %}
   <details class="lib-group panel" style="padding:0;" {% if groups|length == 1 %}open{% endif %}>
-    <summary style="cursor:pointer;padding:14px 20px;font-weight:700;">📁 {{ g.name }} <span class="empty">({{ g.files|length }}개)</span></summary>
+    <summary style="cursor:pointer;padding:14px 20px;font-weight:700;">📁 {{ g.name }} <span class="empty grp-count">({{ g.files|length }}개)</span>
+      <label style="font-weight:500;font-size:0.82rem;margin-left:12px;cursor:pointer;" onclick="event.stopPropagation();"><input type="checkbox" class="grp-sel"> 이 묶음 전체 선택</label></summary>
     <div style="padding:0 16px 8px;">
     {% for f in g.files %}
     <div class="student-card lib-item" data-name="{{ f.name|lower }}">
       <div class="student-head">
-        <span class="name" style="word-break:break-all;">{{ f.short }} <span class="empty">({{ f.size_mb }}MB)</span></span>
-        <form method="post" action="/admin/library/delete" onsubmit="return confirm('이 음원을 보관함에서 삭제할까요? 진도표에 배정돼 있던 곳에서는 사라져요.')">
+        <span class="name" style="word-break:break-all;"><input type="checkbox" class="lib-check" value="{{ f.name }}" style="margin-right:8px;transform:scale(1.2);">{{ f.short }} <span class="empty">({{ f.size_mb }}MB)</span></span>
+        <form class="del-form" method="post" action="/admin/library/delete">
           <input type="hidden" name="filename" value="{{ f.name }}">
           <button type="submit" class="btn-danger">삭제</button>
         </form>
@@ -103,6 +111,67 @@
   {% endfor %}
 </div>
 <script>
+  const visibleChecks = () => [...document.querySelectorAll('.lib-item')].filter(c => c.style.display !== 'none').map(c => c.querySelector('.lib-check'));
+  const allChecks = () => [...document.querySelectorAll('.lib-check')];
+  function refreshSel() {
+    const sel = allChecks().filter(x => x.checked).length;
+    const bd = document.getElementById('bulkDel'), sc = document.getElementById('selCount');
+    if (!bd) return;
+    bd.disabled = sel === 0;
+    bd.textContent = sel ? `선택한 음원 삭제 (${sel}개)` : '선택한 음원 삭제';
+    sc.textContent = sel ? `${sel}개 선택됨` : '선택된 음원 없음';
+    const vs = visibleChecks();
+    document.getElementById('selAll').checked = vs.length > 0 && vs.every(x => x.checked);
+  }
+  function refreshCounts() {
+    let total = 0;
+    document.querySelectorAll('.lib-group').forEach(g => {
+      const n = g.querySelectorAll('.lib-item').length;
+      total += n;
+      if (!n) g.remove();
+      else { const el = g.querySelector('.grp-count'); if (el) el.textContent = `(${n}개)`; }
+    });
+    const h = document.querySelector('h2'); if (h) h.textContent = `보관 중인 음원 (${total}개)`;
+    if (!total) { const b = document.getElementById('bulkBar'); if (b) b.remove(); }
+  }
+  async function deleteFiles(names) {
+    const fd = new FormData();
+    names.forEach(n => fd.append('filenames', n));
+    const r = await fetch('/admin/library/delete-many', { method: 'POST', body: fd, headers: { 'X-Requested-With': 'fetch' } });
+    if (!r.ok) throw new Error();
+    const j = await r.json();
+    const gone = new Set(j.deleted);
+    document.querySelectorAll('.lib-item').forEach(c => {
+      if (gone.has(c.querySelector('.lib-check').value)) c.remove();
+    });
+    refreshCounts(); refreshSel();
+  }
+  document.addEventListener('change', e => {
+    if (e.target.classList.contains('lib-check')) refreshSel();
+    if (e.target.id === 'selAll') { visibleChecks().forEach(x => x.checked = e.target.checked); refreshSel(); }
+    if (e.target.classList.contains('grp-sel')) {
+      e.target.closest('.lib-group').querySelectorAll('.lib-item').forEach(c => {
+        if (c.style.display !== 'none') c.querySelector('.lib-check').checked = e.target.checked;
+      });
+      refreshSel();
+    }
+  });
+  const bulkBtn = document.getElementById('bulkDel');
+  if (bulkBtn) bulkBtn.addEventListener('click', async () => {
+    const names = allChecks().filter(x => x.checked).map(x => x.value);
+    if (!names.length) return;
+    if (!confirm(`선택한 음원 ${names.length}개를 삭제할까요? 진도표에 배정돼 있던 곳에서는 사라져요.`)) return;
+    bulkBtn.disabled = true;
+    try { await deleteFiles(names); } catch (err) { alert('삭제에 실패했어요. 다시 시도해 주세요.'); refreshSel(); }
+  });
+  document.querySelectorAll('.del-form').forEach(f => {
+    f.addEventListener('submit', async e => {
+      e.preventDefault();
+      if (!confirm('이 음원을 보관함에서 삭제할까요? 진도표에 배정돼 있던 곳에서는 사라져요.')) return;
+      try { await deleteFiles([f.querySelector('input[name=filename]').value]); }
+      catch (err) { alert('삭제에 실패했어요. 다시 시도해 주세요.'); }
+    });
+  });
   document.querySelectorAll('.script-form').forEach(f => {
     f.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -137,6 +206,7 @@
       if (q) g.open = any > 0;
       shown += any;
     });
+    refreshSel();
     const n = document.getElementById('noLibResult');
     if (n) n.style.display = (q && shown === 0) ? 'block' : 'none';
   });
